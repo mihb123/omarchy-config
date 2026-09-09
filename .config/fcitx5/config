@@ -1,0 +1,29 @@
+[Hotkey]
+# Enumerate input method group forward
+EnumerateGroupForwardKeys=
+# Enumerate input method group backward
+EnumerateGroupBackwardKeys=
+# Enumerate when press trigger key repeatedly
+EnumerateWithTriggerKeys=True
+
+# NOTE: Ctrl+Shift is NOT set here on purpose.
+# fcitx5 only fires modifier-only hotkeys on key *release*, and Hyprland 0.56.2
+# drops modifier release events to the input method keyboard grab
+# (hyprwm/Hyprland#15886). Ctrl+Shift is handled in ~/.config/hypr/bindings.lua
+# instead. Ctrl+Space below is a fallback that goes through fcitx5 directly.
+[Hotkey/TriggerKeys]
+0=Control+space
+
+[Hotkey/EnumerateForwardKeys]
+0=
+
+[Hotkey/EnumerateBackwardKeys]
+0=
+
+[Behavior]
+# Active By Default
+ActiveByDefault=False
+# Share Input State (All/No/Program)
+ShareInputState=No
+# Show Input Method Information when switch input method
+ShowInputMethodInformation=True

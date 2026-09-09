@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Release the livetrans dictation daemon once it has been idle long enough.
+#
+# The daemon holds ~1.2 GiB of anonymous memory for a warm model so that a
+# keypress costs nothing. That is worth paying while you are dictating and pure
+# waste while you are not, so this runs on a timer and hands the memory back
+# after LIVETRANS_IDLE_S of no use. The next F10 press starts it again through
+# this same systemd unit (see spawn_daemon() in dictate) and is listening about
+# 0.9 s later.
+#
+# Only "idle" is safe to quit on: "loading", "listening" and "working" all mean
+# a take is in flight, and quitting would drop it.
+set -uo pipefail
+
+IDLE_S=${LIVETRANS_IDLE_S:-600}
+RUNTIME="${XDG_RUNTIME_DIR:-/tmp/livetrans-$(id -u)}/livetrans"
+STATE=$RUNTIME/state
+DICTATE=${LIVETRANS_DICTATE:-$HOME/Work/trans/dictate}
+
+[[ -S $RUNTIME/dictate.sock ]] || exit 0     # nothing is listening
+[[ -r $STATE ]] || exit 0
+
+read -r state < "$STATE" || exit 0
+[[ $state == idle ]] || exit 0
+
+# STATE is rewritten on every transition, so its mtime is the last time the
+# daemon did anything at all.
+changed=$(stat -c %Y "$STATE" 2>/dev/null) || exit 0
+(( $(date +%s) - changed >= IDLE_S )) || exit 0
+
+exec "$DICTATE" quit

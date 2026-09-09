@@ -1,0 +1,250 @@
+#!/bin/bash
+
+# Faster SUPER+K. Identical behaviour to omarchy-menu-keybindings — same
+# records, same ordering, same dispatch — but the path from key press to
+# visible menu is stripped down to one fork.
+#
+# WHY THE STOCK PATH IS SLOW (measured with omarchy-keybindings-profile on an
+# idle machine; every number roughly triples when the CPU is busy, because
+# almost all of it is process startup):
+#
+#     ~9ms   hyprctl devices + hyprctl binds + sha256sum, to key the cache
+#     ~4ms   reading and cutting the cached records
+#    ~53ms   two perl runs building the IPC payload; JSON::PP is pure Perl
+#            and its compile dominates
+#    ~72ms   omarchy-shell -> timeout -> qs ipc summon (qs client startup is
+#            ~28ms of it; the rest is the shell building a 230-row model)
+#    ~30ms   Hyprland mapping the menu layer
+#   -----
+#   ~178ms   total, over ~18 short-lived processes
+#
+# WHAT THIS DOES INSTEAD:
+#
+#   * Caches the finished IPC payload, not just the records, with the two
+#     per-invocation file paths left as placeholders that bash substitutes
+#     without forking. No jq, no perl on the warm path.
+#   * Skips the omarchy-shell wrapper and calls qs ipc directly.
+#   * Validates the cache by mtime against the Hyprland config, which costs
+#     zero processes, then re-verifies against `hyprctl binds` in the
+#     background *after* the menu is already on screen. A change made in a
+#     way mtime cannot see (e.g. `hyprctl switchxkblayout`) therefore costs
+#     one stale render and fixes itself; `--refresh` forces it immediately.
+#   * Loads the stock script's functions only when they are actually needed
+#     — a cache rebuild, or dispatching the row you picked — so they never
+#     sit on the path to first paint.
+#
+# Usage: omarchy-menu-keybindings-fast [--print|-p] [--refresh]
+# Profile: omarchy-keybindings-profile --compare
+
+# No `set -u`: the stock script's functions are sourced into this shell and
+# are not written for it.
+set -o pipefail
+
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/keybindings-fast"
+records_file="$cache_dir/records"
+payload_file="$cache_dir/payload.tpl"
+key_file="$cache_dir/key"
+
+menu_width=800
+menu_height=500
+
+SEL_TOKEN='@@SELECTION_FILE@@'
+DONE_TOKEN='@@DONE_FILE@@'
+
+# ------------------------------------------------------- stock script access
+
+stock_loaded=0
+
+# The stock script is ~500 lines of functions followed by a main block. Load
+# the functions and drop the main block, so record parsing, keycode
+# resolution, the upstream cache and dispatch all stay whatever omarchy
+# ships and keep working across updates.
+load_stock() {
+  (( stock_loaded )) && return 0
+  local stock
+  stock=$(command -v omarchy-menu-keybindings) || {
+    echo "omarchy-menu-keybindings-fast: stock script not found on PATH" >&2
+    return 1
+  }
+  source /dev/stdin <<<"$(sed '/^if \[\[ \$1 ==/,$d' "$stock")" || return 1
+  # The stock script's `declare -A` lines run inside this function, which makes
+  # them function-local and leaves build_lua_bind_cache writing to nothing.
+  # Re-create the three maps in the global scope.
+  declare -gA LUA_BIND_KEY_MAP LUA_BIND_DISPATCHER_MAP LUA_BIND_ARG_MAP
+  stock_loaded=1
+}
+
+# --------------------------------------------------------------- cache logic
+
+# Files whose mtime implies the bindings may have changed. Directory mtimes
+# cover files being added or removed inside them.
+config_inputs() {
+  printf '%s\n' \
+    "$HOME/.config/hypr" \
+    "$HOME"/.config/hypr/*.lua \
+    "${OMARCHY_PATH:-/usr/share/omarchy}/default/hypr" \
+    "${OMARCHY_PATH:-/usr/share/omarchy}"/default/hypr/bindings/*.lua
+}
+
+cache_is_fresh() {
+  [[ -s $records_file && -s $payload_file ]] || return 1
+  local input
+  while IFS= read -r input; do
+    [[ -e $input ]] || continue
+    [[ $input -nt $payload_file ]] && return 1
+  done < <(config_inputs)
+  return 0
+}
+
+rebuild_cache() {
+  load_stock || return 1
+
+  local records
+  records=$(output_binding_records) || return 1
+  [[ -n $records ]] || return 1
+
+  mkdir -p "$cache_dir" || return 1
+  # Clear temp files a previous interrupted rebuild left behind.
+  rm -f "$cache_dir"/records.?????? "$cache_dir"/payload.??????
+
+  local tmp_records tmp_payload options
+  tmp_records=$(mktemp "$cache_dir/records.XXXXXX") || return 1
+  tmp_payload=$(mktemp "$cache_dir/payload.XXXXXX") || { rm -f "$tmp_records"; return 1; }
+
+  printf '%s\n' "$records" >"$tmp_records"
+
+  # jq builds the options array in ~8ms. The bash fallback does the same
+  # escaping inline — no command substitution per row, which costs a fork
+  # each and turned a 10ms job into 410ms.
+  if command -v jq >/dev/null 2>&1; then
+    options=$(cut -f1 "$tmp_records" | jq -Rcn '[inputs]') || options=""
+  fi
+
+  if [[ -z $options ]]; then
+    local line escaped
+    options="["
+    while IFS=$'\t' read -r line _; do
+      [[ -n $line ]] || continue
+      escaped=${line//\\/\\\\}
+      escaped=${escaped//\"/\\\"}
+      options+="${options:+,}"
+      options+="\"$escaped\""
+    done <"$tmp_records"
+    options=${options/\[,/[}
+    options+="]"
+  fi
+
+  printf '{"mode":"select","prompt":"Keybindings","options":%s,"selectionFile":"%s","doneFile":"%s","width":%d,"maxHeight":%d}' \
+    "$options" "$SEL_TOKEN" "$DONE_TOKEN" "$menu_width" "$menu_height" >"$tmp_payload"
+
+  mv "$tmp_records" "$records_file" && mv "$tmp_payload" "$payload_file"
+}
+
+# Confirm the cache still matches what Hyprland actually has bound. Runs in
+# the background once the menu is up, so its ~9ms of hyprctl never delays a
+# frame. Uses the stock cache key, which folds in the active keymap.
+verify_cache_async() {
+  (
+    load_stock >/dev/null 2>&1 || exit 0
+    local key
+    key=$(keybindings_cache_key) || exit 0
+    [[ -s $key_file && $(<"$key_file") == "$key" ]] && exit 0
+    rebuild_cache >/dev/null 2>&1 && printf '%s\n' "$key" >"$key_file"
+  ) >/dev/null 2>&1 &
+}
+
+# ---------------------------------------------------------------------- main
+
+case "${1:-}" in
+  --print|-p)
+    load_stock || exit 1
+    output_keybindings
+    exit 0
+    ;;
+  --refresh)
+    rm -f "$key_file"
+    rebuild_cache || { echo "omarchy-menu-keybindings-fast: rebuild failed" >&2; exit 1; }
+    load_stock && keybindings_cache_key >"$key_file"
+    echo "keybindings cache rebuilt: $cache_dir"
+    exit 0
+    ;;
+  "") ;;
+  *)
+    echo "Usage: omarchy-menu-keybindings-fast [--print|-p] [--refresh]" >&2
+    exit 1
+    ;;
+esac
+
+if ! cache_is_fresh; then
+  rebuild_cache || {
+    # Nothing cached and nothing rebuildable: hand off to the stock script
+    # rather than showing an empty menu.
+    exec omarchy-menu-keybindings
+  }
+  rm -f "$key_file"
+fi
+
+run_dir="${XDG_RUNTIME_DIR:-/tmp}"
+selection_file="$run_dir/omarchy-kb-select.$$"
+done_file="$run_dir/omarchy-kb-done.$$"
+rm -f "$selection_file" "$done_file"
+trap 'rm -f "$selection_file" "$done_file"' EXIT
+
+# $(<file) and ${var//a/b} are builtins, so the payload is assembled without
+# spawning anything.
+payload=$(<"$payload_file")
+payload=${payload//$SEL_TOKEN/$selection_file}
+payload=${payload//$DONE_TOKEN/$done_file}
+
+[[ -n ${OMARCHY_PATH:-} ]] || OMARCHY_PATH=/usr/share/omarchy
+
+if [[ -z ${WAYLAND_DISPLAY:-} ]]; then
+  for socket in "$run_dir"/wayland-[0-9]*; do
+    [[ $socket == *.lock ]] && continue
+    [[ -S $socket ]] || continue
+    export WAYLAND_DISPLAY=${socket##*/}
+    break
+  done
+fi
+
+# The cloned menu plugin listens on a Unix socket in XDG_RUNTIME_DIR and
+# accepts exactly the payload shell.summon() takes. Handing it over with socat
+# costs ~2ms; the qs client below spends ~90ms in Qt startup before it moves a
+# byte. Fall back to qs whenever the socket is not there — a stock shell, a
+# shell still starting, or no socat installed.
+menu_socket="$run_dir/omarchy-menu-open.sock"
+
+if ! { [[ -S $menu_socket ]] && command -v socat >/dev/null 2>&1 \
+       && socat -u - "UNIX-CONNECT:$menu_socket" <<<"$payload" 2>/dev/null; }; then
+  qs ipc -n -p "$OMARCHY_PATH/shell" call -- shell summon omarchy.menu "$payload" >/dev/null 2>&1
+fi
+
+verify_cache_async
+
+# Terminate any older instances of this script so we do not pile up orphaned pollers
+for old_pid in $(pgrep -f "omarchy-menu-keybindings-fast" 2>/dev/null); do
+  if [[ $old_pid != "$$" ]]; then
+    kill "$old_pid" 2>/dev/null || true
+  fi
+done
+
+# The stock script polls the done file every 50ms. 30ms sits well below
+# the perceptual threshold while preventing excessive fork pressure.
+# Timeout after 120s in case the menu is dismissed or closed without writing done.
+wait_start=$SECONDS
+while [[ ! -e $done_file ]]; do
+  if (( SECONDS - wait_start >= 120 )); then
+    exit 0
+  fi
+  sleep 0.03
+done
+
+[[ -s $selection_file ]] || exit 0
+selection=$(<"$selection_file")
+[[ -n $selection ]] || exit 0
+
+record=$(awk -F '\t' -v selection="$selection" '$1 == selection { print; exit }' "$records_file")
+[[ -n $record ]] || exit 0
+
+load_stock || exit 1
+dispatch_binding "$(cut -f2 <<<"$record")" "$(cut -f3- <<<"$record")"

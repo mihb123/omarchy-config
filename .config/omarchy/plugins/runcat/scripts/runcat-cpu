@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+import sys
+import time
+
+def read_cpu():
+    try:
+        with open("/proc/stat", "r") as f:
+            fields = [float(x) for x in f.readline().split()[1:9]]
+        idle = fields[3] + fields[4]
+        non_idle = fields[0] + fields[1] + fields[2] + fields[5] + fields[6] + fields[7]
+        return idle, idle + non_idle
+    except Exception:
+        return 0.0, 0.0
+
+def main():
+    prev_idle, prev_total = read_cpu()
+    time.sleep(0.5)
+    while True:
+        idle, total = read_cpu()
+        dt = total - prev_total
+        di = idle - prev_idle
+        prev_idle, prev_total = idle, total
+        if dt > 0:
+            usage = (dt - di) / dt * 100.0
+            usage = max(0.0, min(100.0, usage))
+        else:
+            usage = 0.0
+        sys.stdout.write(f"{usage:.1f}\n")
+        sys.stdout.flush()
+        time.sleep(1.0)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (KeyboardInterrupt, BrokenPipeError):
+        pass

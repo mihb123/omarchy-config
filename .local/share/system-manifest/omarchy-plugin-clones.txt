@@ -1,0 +1,6 @@
+mihb.indicators
+mihb.menu
+mihb.notifications
+quick-settings
+runcat
+workspaces

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "workspaces",
+  "name": "Workspaces",
+  "version": "1.0.0",
+  "author": "mihb",
+  "description": "Active workspaces with window indicators and focused highlight",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Workspaces.qml"
+  },
+  "barWidget": {
+    "displayName": "Workspaces",
+    "description": "Active workspaces with window indicators and focused highlight",
+    "category": "Compositor",
+    "allowMultiple": false
+  }
+}

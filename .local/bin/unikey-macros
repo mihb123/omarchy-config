@@ -1,0 +1,342 @@
+#!/bin/bash
+# unikey-macros — quản lý từ viết tắt cho fcitx5.
+#
+# Hai kho, vì giới hạn của chúng khác nhau:
+#
+#   macro Unikey   ~/.config/fcitx5/unikey/macro
+#     Gõ "~gt" rồi dấu cách -> tự bung thành "giải thích", không popup.
+#     Chỉ chạy khi đang ở chế độ VI.
+#     Khoá KHÔNG được chứa , ; : . " \' ! ? < > = + - * / \\ _ @ # $ % & ( ) { }
+#     [ ] | hay khoảng trắng: fcitx5-unikey commit rồi gọi resetBuf() ngay khi
+#     gặp một trong các ký tự đó (WordBreakSyms ở unikey/inputproc.cpp,
+#     UnikeyState::keyEvent ở src/unikey-im.cpp), nên bộ đệm trống trước khi
+#     phần còn lại của khoá được gõ. Vì thế "!gt" không bao giờ bung, còn
+#     "~gt", "`gt", "^gt" hay "gtx" thì có — ~ ` ^ là ba ký tự bị loại khỏi
+#     WordBreakSyms.
+#     Nội dung cũng chỉ nhận ký tự trong BMP: bộ giải mã UTF-8 của nó
+#     (UnicodeUTF8Charset::nextInput ở unikey/charset.cpp) dừng ở chuỗi 3 byte,
+#     nên emoji 4 byte như 👍 (U+1F44D) không đi qua đây được.
+#
+#   quick phrase   ~/.local/share/fcitx5/data/quickphrase.d/mihb.mb
+#     Bấm Super+; (hoặc Super+`) rồi gõ "like", chọn bằng dấu cách -> 👍.
+#     Chạy ở cả VI lẫn EN, nhận mọi ký tự Unicode kể cả emoji.
+#
+# Cả hai bảng chỉ được nạp trong reloadConfig() của addon tương ứng.
+# `fcitx5-remote -r` KHÔNG chạm tới chúng — phải gọi ReloadAddonConfig qua
+# D-Bus, việc mà script này tự làm sau mỗi lần ghi.
+
+set -euo pipefail
+
+MACRO_FILE="$HOME/.config/fcitx5/unikey/macro"
+MACRO_HEADER='DO NOT DELETE THIS LINE*** version=1 ***'
+PHRASE_FILE="$HOME/.local/share/fcitx5/data/quickphrase.d/mihb.mb"
+
+# Giới hạn cứng của fcitx5-unikey (unikey/keycons.h).
+MACRO_KEY_MAX=15
+MACRO_TEXT_MAX=1024
+
+notify() { command -v notify-send >/dev/null 2>&1 && notify-send -a "Unikey" "$1" "${2:-}" >/dev/null 2>&1 || true; }
+die() { echo "unikey-macros: $1" >&2; notify "Không thực hiện được" "$1"; exit 1; }
+
+ensure_files() {
+  mkdir -p -- "$(dirname -- "$MACRO_FILE")" "$(dirname -- "$PHRASE_FILE")"
+  if [[ ! -f $MACRO_FILE ]]; then
+    printf '%s\n' "$MACRO_HEADER" >"$MACRO_FILE"
+  elif ! head -n 1 -- "$MACRO_FILE" | grep -q '\*\*\*.*version='; then
+    # Thiếu header thì Unikey đọc cả file theo bảng mã VIQR rồi ghi đè lại.
+    local body; body=$(cat -- "$MACRO_FILE")
+    { printf '%s\n' "$MACRO_HEADER"; printf '%s\n' "$body"; } >"$MACRO_FILE"
+  fi
+  [[ -f $PHRASE_FILE ]] || : >"$PHRASE_FILE"
+}
+
+# `fcitx5-remote -r` chỉ nạp lại config toàn cục; bảng macro và file .mb của
+# quick phrase nằm sau reloadConfig() của từng addon, phải gọi thẳng D-Bus.
+reload_addon() {
+  dbus-send --session --dest=org.fcitx.Fcitx5 --type=method_call \
+    /controller org.fcitx.Fcitx.Controller1.ReloadAddonConfig "string:$1" >/dev/null 2>&1
+}
+
+reload() {
+  reload_addon unikey || die "không gọi được fcitx5 qua D-Bus (fcitx5 có đang chạy không?)"
+  reload_addon quickphrase || true
+}
+
+# ---------------------------------------------------------------- đọc / ghi
+
+# In "khoá<TAB>nội dung" cho từng mục.
+macro_entries() {
+  [[ -f $MACRO_FILE ]] || return 0
+  tail -n +2 -- "$MACRO_FILE" |
+    awk '{ i = index($0, ":"); if (i > 1) printf "%s\t%s\n", substr($0, 1, i-1), substr($0, i+1) }'
+}
+
+phrase_entries() {
+  [[ -f $PHRASE_FILE ]] || return 0
+  awk '{
+    if ($0 ~ /^[[:space:]]*$/) next
+    i = match($0, /[[:space:]]/); if (i == 0) next
+    key = substr($0, 1, i-1); rest = substr($0, i)
+    sub(/^[[:space:]]+/, "", rest); if (rest == "") next
+    printf "%s\t%s\n", key, rest
+  }' "$PHRASE_FILE"
+}
+
+count_macro()  { macro_entries  | grep -c . || true; }
+count_phrase() { phrase_entries | grep -c . || true; }
+
+# Nhận "khoá<TAB>nội dung" trên stdin, ghi lại toàn bộ file.
+macro_write() {
+  local tmp; tmp=$(mktemp)
+  printf '%s\n' "$MACRO_HEADER" >"$tmp"
+  awk '{ i = index($0, "\t"); if (i > 1) printf "%s:%s\n", substr($0, 1, i-1), substr($0, i+1) }' >>"$tmp"
+  mv -- "$tmp" "$MACRO_FILE"
+}
+
+phrase_write() {
+  local tmp; tmp=$(mktemp)
+  awk '{ i = index($0, "\t"); if (i > 1) printf "%s\t%s\n", substr($0, 1, i-1), substr($0, i+1) }' >"$tmp"
+  mv -- "$tmp" "$PHRASE_FILE"
+}
+
+has_key() { # has_key <macro|phrase> <khoá>
+  local lister=macro_entries
+  [[ $1 == phrase ]] && lister=phrase_entries
+  "$lister" | awk -F'\t' -v k="$2" '$1 == k { found = 1 } END { exit !found }'
+}
+
+# ---------------------------------------------------------------- kiểm tra
+
+# Đúng khi chuỗi có ký tự ngoài BMP (emoji 4 byte) — Unikey không nhả được.
+has_astral() { perl -CSDA -e 'exit(($ARGV[0] =~ /[\x{10000}-\x{10FFFF}]/) ? 0 : 1)' -- "$1"; }
+ulen() { perl -CSDA -e 'print length($ARGV[0])' -- "$1"; }
+
+# fcitx5-unikey commit rồi xoá sạch bộ đệm ngay khi gặp một trong các ký tự này
+# (WordBreakSyms trong unikey/inputproc.cpp + UnikeyState::keyEvent), nên khoá
+# macro chứa bất kỳ ký tự nào ở đây thì không bao giờ khớp. Chỉ còn ~ ` ^ là
+# dùng làm tiền tố được.
+WORD_BREAK=',;:."'"'"'!?<>=+-*/\_@#$%&(){}[]| '
+
+has_word_break() {
+  local i ch
+  for (( i = 0; i < ${#1}; i++ )); do
+    ch=${1:i:1}
+    [[ $WORD_BREAK == *"$ch"* ]] && return 0
+  done
+  return 1
+}
+
+# Kho nào hợp với cặp khoá/nội dung này.
+store_for() {
+  case $1 in \;*) echo phrase; return ;; esac
+  if has_astral "$2" || has_astral "$1"; then echo phrase; else echo macro; fi
+}
+
+validate() { # validate <store> <khoá> <nội dung>
+  local store=$1 key=$2 value=$3
+  [[ -n $key ]] || die "khoá rỗng"
+  [[ -n $value ]] || die "nội dung rỗng"
+  [[ $key != *$'\t'* && $value != *$'\t'* ]] || die "khoá/nội dung không được chứa Tab"
+  if [[ $store == macro ]]; then
+    if has_word_break "$key"; then
+      die "khoá macro không được chứa $WORD_BREAK — Unikey xoá bộ đệm ở các ký tự đó. Dùng tiền tố ~ hoặc \` thay cho ! ;"
+    fi
+    (( $(ulen "$key") <= MACRO_KEY_MAX )) || die "khoá macro tối đa $MACRO_KEY_MAX ký tự"
+    (( $(ulen "$value") <= MACRO_TEXT_MAX )) || die "nội dung macro tối đa $MACRO_TEXT_MAX ký tự"
+    if has_astral "$value"; then die "emoji ngoài BMP phải nằm ở quick phrase, macro Unikey không nhả được"; fi
+  else
+    [[ $key != *[[:space:]]* ]] || die "khoá quick phrase không được chứa khoảng trắng"
+  fi
+}
+
+# ---------------------------------------------------------------- thao tác
+
+cmd_list() {
+  local key value
+  while IFS=$'\t' read -r key value; do printf 'macro   %-16s %s\n' "$key" "$value"; done < <(macro_entries)
+  while IFS=$'\t' read -r key value; do printf 'phrase  %-16s %s\n' "$key" "$value"; done < <(phrase_entries)
+}
+
+drop_key() { # drop_key <khoá> — xoá khỏi cả hai kho, không reload. 0 nếu có xoá.
+  local key=$1 found=1
+  if has_key macro "$key"; then
+    macro_entries | awk -F'\t' -v k="$key" '$1 != k' | macro_write
+    found=0
+  fi
+  if has_key phrase "$key"; then
+    phrase_entries | awk -F'\t' -v k="$key" '$1 != k' | phrase_write
+    found=0
+  fi
+  return $found
+}
+
+cmd_add() { # cmd_add <khoá> <nội dung>
+  local key=$1 value=$2 store
+  store=$(store_for "$key" "$value")
+  # Khoá quick phrase được gõ *sau* phím gọi, nên tiền tố ';' chỉ là quy ước
+  # đặt tên — bỏ đi để khỏi phải gõ dấu ';' hai lần.
+  local renamed=""
+  if [[ $store == phrase ]]; then
+    key=${key#;}
+  elif has_word_break "${key:0:1}" && ! has_word_break "${key:1}"; then
+    # '!gt' không bao giờ bung được; '~gt' thì có. Đổi tiền tố và báo lại.
+    renamed=$key
+    key="~${key:1}"
+  fi
+  validate "$store" "$key" "$value"
+  drop_key "$key" || true
+  if [[ $store == macro ]]; then
+    { macro_entries; printf '%s\t%s\n' "$key" "$value"; } |
+      grep . | LC_ALL=C sort -u -t$'\t' -k1,1 | macro_write
+  else
+    { phrase_entries; printf '%s\t%s\n' "$key" "$value"; } |
+      grep . | LC_ALL=C sort -u -t$'\t' -k1,1 | phrase_write
+  fi
+  reload
+  if [[ -n $renamed ]]; then
+    notify "Đã đổi “$renamed” thành “$key”" "Unikey xoá bộ đệm ở ký tự ${renamed:0:1} nên khoá cũ không bao giờ bung"
+  fi
+  if [[ $store == macro ]]; then
+    notify "Đã lưu macro “$key”" "$value — gõ $key rồi dấu cách (chế độ VI)"
+  else
+    notify "Đã lưu quick phrase “$key”" "$value — bấm Super+; rồi gõ $key"
+  fi
+}
+
+cmd_rm() {
+  local key=$1
+  drop_key "$key" || die "không có mục “$key”"
+  reload
+  notify "Đã xoá “$key”"
+}
+
+cmd_reload() {
+  reload
+  notify "Đã nạp lại fcitx5" "$(count_macro) macro · $(count_phrase) quick phrase"
+}
+
+cmd_edit() {
+  ensure_files
+  omarchy-launch-tui --app-id=org.omarchy.unikey-macros bash -lc 'unikey-macros _edit'
+}
+
+cmd_edit_inline() {
+  ensure_files
+  local editor=nvim state="$HOME/.local/state/omarchy/defaults/editor"
+  [[ -f $state ]] && read -r editor <"$state"
+  command -v "$editor" >/dev/null 2>&1 || editor=nvim
+  "$editor" "$MACRO_FILE" "$PHRASE_FILE"
+  reload
+  echo "Đã nạp lại fcitx5 — $(count_macro) macro · $(count_phrase) quick phrase"
+}
+
+# ---------------------------------------------------------------- giao diện
+
+ICON_ADD=""
+ICON_MACRO=""
+ICON_PHRASE=""
+ICON_FILE=""
+ICON_RELOAD=""
+ICON_GEAR=""
+ICON_TRASH=""
+ICON_COPY=""
+ICON_BACK=""
+
+pick() { omarchy-menu-select "$1" -- --width 620 --height 640; }
+ask()  { omarchy-menu-input "$1" --width 620; }
+
+menu_entry() { # menu_entry <khoá> <nội dung>
+  local key=$1 value=$2 answer new
+  answer=$(printf '%s\n' \
+    "$ICON_MACRO	Sửa nội dung	$value" \
+    "$ICON_ADD	Đổi từ khoá	$key" \
+    "$ICON_COPY	Sao chép nội dung	$value" \
+    "$ICON_TRASH	Xoá	$key" \
+    "$ICON_BACK	Quay lại" | pick "$key") || return 0
+
+  case ${answer%%$'\t'*} in
+    "Sửa nội dung")
+      new=$(ask "Nội dung mới cho “$key”") || return 0
+      cmd_add "$key" "$new" ;;
+    "Đổi từ khoá")
+      new=$(ask "Từ khoá mới thay cho “$key”") || return 0
+      drop_key "$key" || true
+      cmd_add "$new" "$value" ;;
+    "Sao chép nội dung")
+      printf '%s' "$value" | wl-copy
+      notify "Đã chép vào clipboard" "$value" ;;
+    "Xoá")
+      cmd_rm "$key" ;;
+    *) menu_main ;;
+  esac
+}
+
+menu_add() {
+  local key value
+  key=$(ask "Từ khoá mới — vd !gt, hoặc ;like nếu nội dung là emoji") || return 0
+  value=$(ask "“$key” sẽ bung thành") || return 0
+  cmd_add "$key" "$value"
+}
+
+menu_main() {
+  ensure_files
+  local rows=() key value answer field1 field2
+
+  rows+=("$ICON_ADD	Thêm từ viết tắt	gõ từ khoá rồi nội dung")
+  while IFS=$'\t' read -r key value; do
+    [[ -n $key ]] && rows+=("$ICON_MACRO	$key	$value")
+  done < <(macro_entries)
+  while IFS=$'\t' read -r key value; do
+    [[ -n $key ]] && rows+=("$ICON_PHRASE	$key	$value  ·  Super+;")
+  done < <(phrase_entries)
+  rows+=("$ICON_FILE	Mở file trong editor	$(count_macro) macro · $(count_phrase) quick phrase")
+  rows+=("$ICON_RELOAD	Nạp lại fcitx5	áp dụng thay đổi sửa tay")
+  rows+=("$ICON_GEAR	Cài đặt fcitx5	fcitx5-configtool")
+
+  answer=$(printf '%s\n' "${rows[@]}" | pick "Từ viết tắt Unikey") || return 0
+  field1=${answer%%$'\t'*}
+  field2=${answer#*$'\t'}
+  [[ $field2 == "$answer" ]] && field2=""
+
+  case $field1 in
+    "Thêm từ viết tắt")     menu_add ;;
+    "Mở file trong editor") cmd_edit ;;
+    "Nạp lại fcitx5")       cmd_reload ;;
+    "Cài đặt fcitx5")       setsid fcitx5-configtool >/dev/null 2>&1 & ;;
+    *)
+      # Hàng quick phrase mang thêm hậu tố gợi nhớ phím gọi, cắt đi.
+      menu_entry "$field1" "${field2%'  ·  Super+;'}" ;;
+  esac
+}
+
+# ---------------------------------------------------------------- dispatch
+
+case "${1:-menu}" in
+  menu|"")  menu_main ;;
+  list)     cmd_list ;;
+  add)      shift; [[ $# -eq 2 ]] || die "dùng: unikey-macros add <khoá> <nội dung>"; ensure_files; cmd_add "$1" "$2" ;;
+  rm)       shift; [[ $# -eq 1 ]] || die "dùng: unikey-macros rm <khoá>"; ensure_files; cmd_rm "$1" ;;
+  edit)     cmd_edit ;;
+  _edit)    cmd_edit_inline ;;
+  reload)   ensure_files; cmd_reload ;;
+  -h|--help|help)
+    cat <<'USAGE'
+unikey-macros — quản lý từ viết tắt cho fcitx5
+
+  unikey-macros              mở menu (mặc định)
+  unikey-macros list         liệt kê tất cả
+  unikey-macros add <khoá> <nội dung>
+  unikey-macros rm <khoá>
+  unikey-macros edit         mở file trong editor, tự nạp lại khi thoát
+  unikey-macros reload       nạp lại bảng macro + quick phrase
+
+Khoá bắt đầu bằng ';' hoặc nội dung có emoji -> quick phrase:
+bấm Super+; rồi gõ khoá, chọn bằng dấu cách. Chạy ở cả VI lẫn EN.
+
+Còn lại -> macro Unikey: gõ khoá rồi dấu cách là tự bung, chỉ ở chế độ VI.
+Khoá macro chỉ được dùng chữ, số và ~ ` ^ — Unikey xoá bộ đệm ở mọi dấu câu
+khác, nên "!gt" không bao giờ bung. Tiền tố ! ; . , sẽ được tự đổi thành ~.
+USAGE
+    ;;
+  *) die "lệnh lạ: $1 (xem --help)" ;;
+esac

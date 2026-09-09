@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "quick-settings",
+  "name": "Quick Settings",
+  "version": "1.0.0",
+  "author": "mihb",
+  "description": "GNOME-like Quick Settings panel for Omarchy",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "QuickSettings.qml"
+  },
+  "barWidget": {
+    "displayName": "Quick Settings",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

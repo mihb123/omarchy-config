@@ -1,0 +1,91 @@
+#!/bin/bash
+#
+# Put a runtime-error notification on the clipboard so it can be pasted
+# straight into a bug report or an agent prompt.
+#
+# Usage: copy-error <summary> <body> <app> <urgency> <exec-argv-json>
+#
+# For a crash toast from omarchy-crash-watch the toast text is useless for
+# debugging — the body is literally "Click to diagnose with AI" — so the crash
+# details ride in the --exec argv instead (omarchy-agent-crash PID COMM EXE
+# SIGNAL). Those are unpacked here and the coredump report is fetched with
+# them. Any other critical notification has nothing behind it, so its own text
+# is what gets copied.
+
+set -uo pipefail
+
+summary=${1:-}
+body=${2:-}
+app=${3:-}
+urgency=${4:-}
+exec_argv=${5:-}
+
+readonly COPY_GLYPH=$'\U000f018f'  # nf-md-clipboard_check
+
+# coredumpctl walks the journal and symbolizes; give it room but never hang
+# the click.
+readonly coredump_timeout=${OMARCHY_COPY_ERROR_TIMEOUT:-20}
+
+now=$(date "+%Y-%m-%d %H:%M:%S")
+
+# NotificationUrgency, as the spec numbers it.
+case $urgency in
+0) urgency_label="low" ;;
+1) urgency_label="normal" ;;
+2) urgency_label="critical" ;;
+*) urgency_label="unknown (${urgency:-})" ;;
+esac
+
+# Pull the crash fields out of the exec argv, but only when it really is the
+# crash handler — any other sender's argv is not ours to interpret.
+crash_pid="" crash_comm="" crash_exe="" crash_signal=""
+if [[ -n $exec_argv ]]; then
+  IFS=$'\t' read -r crash_pid crash_comm crash_exe crash_signal < <(
+    jq -r 'if type == "array" and (.[0] // "") == "omarchy-agent-crash"
+           then [(.[1] // ""), (.[2] // ""), (.[3] // ""), (.[4] // "")] | @tsv
+           else empty end' <<<"$exec_argv" 2>/dev/null
+  )
+fi
+
+{
+  printf '%s\n' "$summary"
+  [[ -n $body ]] && printf '\n%s\n' "$body"
+  printf '\nApp:      %s\n' "${app:-unknown}"
+  printf 'Urgency:  %s\n' "$urgency_label"
+  printf 'Copied:   %s\n' "$now"
+
+  if [[ $crash_pid =~ ^[0-9]+$ ]]; then
+    printf 'PID:      %s\n' "$crash_pid"
+    printf 'Command:  %s\n' "${crash_comm:-unknown}"
+    printf 'Exe:      %s\n' "${crash_exe:-unknown}"
+    printf 'Signal:   %s\n' "${crash_signal:-unknown}"
+
+    printf '\n--- coredumpctl info %s ---\n' "$crash_pid"
+    # Match on PID first. A crash loop reuses the name, so the PID names the
+    # exact dump this toast is about; falling back to the name only when that
+    # dump has already been rotated out.
+    report=$(timeout "$coredump_timeout" coredumpctl info "$crash_pid" 2>&1)
+    if [[ -z $report || $report == "No match found."* ]] && [[ -n $crash_comm ]]; then
+      printf '(no dump for PID %s; showing the newest for %s)\n' "$crash_pid" "$crash_comm"
+      report=$(timeout "$coredump_timeout" coredumpctl info "$crash_comm" 2>&1)
+    fi
+    printf '%s\n' "${report:-coredumpctl returned nothing}"
+  fi
+} >/tmp/.omarchy-copy-error.$$
+
+lines=$(wc -l </tmp/.omarchy-copy-error.$$)
+wl-copy <"/tmp/.omarchy-copy-error.$$"
+copied=$?
+rm -f "/tmp/.omarchy-copy-error.$$"
+
+if ((copied == 0)); then
+  # Low urgency and the default omarchy-action app name, so this confirmation
+  # is not itself treated as a runtime error and copied on click.
+  omarchy-notification-send -g "$COPY_GLYPH" \
+    "Copied to clipboard" \
+    "$lines lines · $summary"
+else
+  omarchy-notification-send -g 󰅚 -u normal \
+    "Clipboard copy failed" \
+    "wl-copy exited $copied"
+fi

@@ -1,0 +1,25 @@
+#!/bin/bash
+# Widget Unikey duy nhất trên bar. Icon tray của fcitx5 bị ẩn trong
+# omarchy.tray ("hidden": ["Fcitx"]) nên chỗ này gánh cả trạng thái lẫn menu.
+
+macro_file="$HOME/.config/fcitx5/unikey/macro"
+phrase_file="$HOME/.local/share/fcitx5/data/quickphrase.d/mihb.mb"
+
+n_macro=$(tail -n +2 -- "$macro_file" 2>/dev/null | grep -c ':' || true)
+n_phrase=$(grep -c '[^[:space:]]' -- "$phrase_file" 2>/dev/null || true)
+
+if [ "$(fcitx5-remote 2>/dev/null)" = "2" ]; then
+  text=VI; label="Tiếng Việt (Unikey)"; class=active
+else
+  text=EN; label="English (US)"; class=""
+fi
+
+tooltip="$label
+${n_macro:-0} từ viết tắt · ${n_phrase:-0} quick phrase
+trái — đổi VI/EN (Ctrl+Shift)
+phải — quản lý từ viết tắt
+giữa — nạp lại fcitx5"
+
+# Chỉ có xuống dòng cần thoát; phần còn lại là hằng số và số nguyên.
+printf '{"text":"%s","tooltip":"%s","class":"%s"}\n' \
+  "$text" "$(printf '%s' "$tooltip" | sed ':a;N;$!ba;s/\n/\\n/g')" "$class"

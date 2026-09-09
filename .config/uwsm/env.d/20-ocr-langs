@@ -1,0 +1,6 @@
+# Changes require a session restart to take effect.
+
+# Languages used by `omarchy capture text` (tesseract OCR).
+# Vietnamese first so diacritics are recognised, English as a fallback for
+# mixed-language screens. Requires: tesseract-data-vie, tesseract-data-eng.
+export OMARCHY_OCR_LANGS="vie+eng"

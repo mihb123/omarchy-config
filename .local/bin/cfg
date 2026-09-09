@@ -1,0 +1,4 @@
+#!/bin/bash
+# Version control for this machine's config. Bare repo at ~/.dotfiles, work-tree $HOME.
+#   cfg status / cfg diff / cfg log --stat / cfg add <file> / cfg commit -m "..."
+exec git --git-dir="$HOME/.dotfiles" --work-tree="$HOME" "$@"

@@ -1,0 +1,108 @@
+--- a/shell/plugins/menu/Menu.qml
++++ b/shell/plugins/menu/Menu.qml
+@@ -44,6 +44,17 @@
+   function ping() { return "ok" }
+ 
+   property string fontFamily: Style.font.menuFamily
++  // visibleRowsHeight binds to displayModel.count, and the two height
++  // functions below walk every row in the model. Filling the model therefore
++  // costs one full height pass per appended row. Suspending the height while
++  // a rebuild runs makes those intermediate passes O(1) and leaves exactly
++  // one real pass, when the flag clears.
++  //
++  // The last value is cached in a plain JS object rather than a QML property:
++  // writing a property from inside the binding would make it a dependency of
++  // visibleRowsHeight and produce a binding loop.
++  property bool suspendRowsHeight: false
++  readonly property var rowsHeightCache: ({ value: 0 })
+   // JSONC menu definitions. The shell parses both at startup and merges
+   // the user file on top of the defaults, so the keybind → IPC → visible
+   // path doesn't have to shell out to bash + jq on every open.
+@@ -179,6 +190,7 @@
+   }
+ 
+   function rowListHeight(_serial, _count, _filter, _divider) {
++    if (root.suspendRowsHeight) return root.rowsHeightCache.value
+     if (displayModel.count === 0) return root.baseRowHeight
+ 
+     var totals = []
+@@ -194,10 +206,12 @@
+       totals.push(total)
+     }
+ 
+-    return foldedListHeight(totals, availableRowsHeight())
++    root.rowsHeightCache.value = foldedListHeight(totals, availableRowsHeight())
++    return root.rowsHeightCache.value
+   }
+ 
+   function dmenuRowListHeight(_serial, _count, _filter) {
++    if (root.suspendRowsHeight) return root.rowsHeightCache.value
+     if (root.mode === "input") return 0
+     if (displayModel.count === 0) return root.baseRowHeight
+ 
+@@ -212,7 +226,8 @@
+       totals.push(total)
+     }
+ 
+-    return foldedListHeight(totals, available)
++    root.rowsHeightCache.value = foldedListHeight(totals, available)
++    return root.rowsHeightCache.value
+   }
+ 
+   function item(id) {
+@@ -516,6 +531,7 @@
+       return
+     }
+ 
++    var pendingRows = []
+     var query = root.filterText.trim().toLowerCase()
+     for (var i = 0; i < root.dmenuOptions.length; i++) {
+       // An option is "<label>", "<glyph>\t<label>", or
+@@ -528,7 +544,7 @@
+       var detail = parts.join("\t")
+       if (query && label.toLowerCase().indexOf(query) < 0
+           && detail.toLowerCase().indexOf(query) < 0) continue
+-      displayModel.append({
++      pendingRows.push({
+         itemId: "dmenu." + i,
+         kind: "dmenu",
+         icon: icon,
+@@ -547,6 +563,8 @@
+       })
+     }
+ 
++    if (pendingRows.length > 0) displayModel.append(pendingRows)
++
+     layoutSerial += 1
+ 
+     if (displayModel.count === 0) selectedIndex = 0
+@@ -558,7 +576,20 @@
+     })
+   }
+ 
++  // Single entry point for both rebuild paths. The height suspension is
++  // applied here, in a try/finally, so no early return — and no throw out of
++  // a provider row builder — can leave the flag set and freeze the card at a
++  // stale height.
+   function rebuildDisplay() {
++    root.suspendRowsHeight = true
++    try {
++      root.rebuildDisplayRows()
++    } finally {
++      root.suspendRowsHeight = false
++    }
++  }
++
++  function rebuildDisplayRows() {
+     if (root.dmenuActive) {
+       root.rebuildDmenuDisplay()
+       return
+@@ -627,7 +658,7 @@
+       }
+     }
+ 
+-    for (var k = 0; k < rows.length; k++) displayModel.append(rows[k])
++    if (rows.length > 0) displayModel.append(rows)
+     layoutSerial += 1
+ 
+     if (displayModel.count === 0) selectedIndex = 0

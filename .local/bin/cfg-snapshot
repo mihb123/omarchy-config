@@ -1,0 +1,20 @@
+#!/bin/bash
+# Dump machine state into ~/.local/share/system-manifest/ so `cfg` can version it.
+set -uo pipefail
+out="$HOME/.local/share/system-manifest"
+mkdir -p "$out"
+
+pacman -Qqe            > "$out/pacman-explicit.txt"  2>/dev/null
+pacman -Qqm            > "$out/pacman-foreign.txt"   2>/dev/null
+pacman -Qq             > "$out/pacman-all.txt"       2>/dev/null
+omarchy version        > "$out/omarchy-version.txt"  2>/dev/null
+
+systemctl list-unit-files --state=enabled --no-legend --no-pager \
+  | awk '{print $1}' | sort > "$out/systemd-system-enabled.txt" 2>/dev/null
+systemctl --user list-unit-files --state=enabled --no-legend --no-pager \
+  | awk '{print $1}' | sort > "$out/systemd-user-enabled.txt" 2>/dev/null
+
+# Plugin clones drift from the packaged originals; record which ones exist.
+ls -1 "$HOME/.config/omarchy/plugins" 2>/dev/null | sort > "$out/omarchy-plugin-clones.txt"
+
+echo "snapshot written to $out"

@@ -1,0 +1,8 @@
+antigravity-ide
+anydesk-bin
+brave-origin-bin
+c-client
+c-client-debug
+electron27-bin
+electron27-bin-debug
+google-chrome

@@ -1,0 +1,231 @@
+--- .upstream/Menu.qml.baseline	2026-09-07 11:25:11.909808785 +0700
++++ Menu.qml	2026-09-07 11:23:09.949079319 +0700
+@@ -19,8 +19,10 @@
+   property string pendingInitialMenu: "root"
+ 
+   function open(payloadJson) {
++    root.perfStart("open")
+     var payload = ({})
+     try { payload = JSON.parse(payloadJson || "{}") } catch (e) { payload = ({}) }
++    root.perfMark("json-parsed(" + (payloadJson || "").length + "b)")
+ 
+     if (payload.fontFamily) root.fontFamily = payload.fontFamily
+ 
+@@ -29,6 +31,7 @@
+     } else {
+       root.openRoute(payload.initialMenu || payload.menu || "root")
+     }
++    root.perfEnd("open-returned")
+   }
+ 
+   function close() {
+@@ -44,6 +47,50 @@
+   function ping() { return "ok" }
+ 
+   property string fontFamily: Style.font.menuFamily
++
++  // ---------------------------------------------------------------- perf log
++  // All perf state lives inside one JS object. Writing to a QML *property*
++  // from inside dmenuRowListHeight() would make it a dependency of the
++  // visibleRowsHeight binding and produce a binding loop, so mutate the
++  // object's fields instead — that emits no change notification.
++  // ------------------------------------------------- rows-height suspension
++  //
++  // visibleRowsHeight binds to displayModel.count, and both height functions
++  // walk every row in the model. Filling the model therefore costs O(rows²):
++  // a 231-row dmenu ran 234 height passes over ~27k rows — 111ms of a 134ms
++  // open, measured with OMARCHY_MENU_PERF=1. Appending the rows in one
++  // append(array) call does not help: the model still emits a count change
++  // per row.
++  //
++  // So suspend the height instead. While `suspendRowsHeight` is true the
++  // functions hand back the last computed value, which makes every
++  // intermediate evaluation O(1); clearing the flag at the end of a rebuild
++  // triggers exactly one real pass. The cache lives in a JS object rather
++  // than a QML property because writing a property from inside the binding
++  // would make it a dependency of visibleRowsHeight and loop.
++  property bool suspendRowsHeight: false
++  readonly property var rowsHeightCache: ({ value: 0 })
++
++  readonly property bool perfLog: Quickshell.env("OMARCHY_MENU_PERF") === "1"
++  readonly property var perf: ({ t0: 0, marks: [], heightCalls: 0, heightMs: 0 })
++  function perfStart(label) {
++    if (!root.perfLog) return
++    root.perf.t0 = Date.now()
++    root.perf.marks = [label]
++    root.perf.heightCalls = 0
++    root.perf.heightMs = 0
++  }
++  function perfMark(label) {
++    if (!root.perfLog || root.perf.t0 === 0) return
++    root.perf.marks.push(label + " @" + (Date.now() - root.perf.t0))
++  }
++  function perfEnd(label) {
++    if (!root.perfLog || root.perf.t0 === 0) return
++    root.perf.marks.push(label + " @" + (Date.now() - root.perf.t0))
++    root.perf.marks.push("heightCalls=" + root.perf.heightCalls + " heightMs=" + root.perf.heightMs)
++    console.warn("[menu-perf] " + root.perf.marks.join(" | "))
++    root.perf.t0 = 0
++  }
+   // JSONC menu definitions. The shell parses both at startup and merges
+   // the user file on top of the defaults, so the keybind → IPC → visible
+   // path doesn't have to shell out to bash + jq on every open.
+@@ -179,6 +226,7 @@
+   }
+ 
+   function rowListHeight(_serial, _count, _filter, _divider) {
++    if (root.suspendRowsHeight) return root.rowsHeightCache.value
+     if (displayModel.count === 0) return root.baseRowHeight
+ 
+     var totals = []
+@@ -194,10 +242,14 @@
+       totals.push(total)
+     }
+ 
+-    return foldedListHeight(totals, availableRowsHeight())
++    root.rowsHeightCache.value = foldedListHeight(totals, availableRowsHeight())
++    return root.rowsHeightCache.value
+   }
+ 
+   function dmenuRowListHeight(_serial, _count, _filter) {
++    if (root.suspendRowsHeight) return root.rowsHeightCache.value
++    var perfEnter = root.perfLog ? Date.now() : 0
++    if (root.perfLog) root.perf.heightCalls += 1
+     if (root.mode === "input") return 0
+     if (displayModel.count === 0) return root.baseRowHeight
+ 
+@@ -212,7 +264,9 @@
+       totals.push(total)
+     }
+ 
+-    return foldedListHeight(totals, available)
++    if (root.perfLog) root.perf.heightMs += Date.now() - perfEnter
++    root.rowsHeightCache.value = foldedListHeight(totals, available)
++    return root.rowsHeightCache.value
+   }
+ 
+   function item(id) {
+@@ -508,7 +562,9 @@
+   }
+ 
+   function rebuildDmenuDisplay() {
++    root.perfMark("rebuildDmenu-enter")
+     displayModel.clear()
++    root.perfMark("model-cleared")
+     root.searchDivider = false
+ 
+     if (root.mode === "input") {
+@@ -516,6 +572,13 @@
+       return
+     }
+ 
++    // Rows are collected into a plain array and handed to the model in one
++    // append(). Appending them one at a time bumps displayModel.count on
++    // every row, and visibleRowsHeight binds to that count — so each append
++    // re-ran dmenuRowListHeight(), which walks every row already in the
++    // model. 231 options meant 234 height passes over ~27k rows: 111ms of a
++    // 134ms open. One append means one height pass.
++    var pendingRows = []
+     var query = root.filterText.trim().toLowerCase()
+     for (var i = 0; i < root.dmenuOptions.length; i++) {
+       // An option is "<label>", "<glyph>\t<label>", or
+@@ -528,7 +591,7 @@
+       var detail = parts.join("\t")
+       if (query && label.toLowerCase().indexOf(query) < 0
+           && detail.toLowerCase().indexOf(query) < 0) continue
+-      displayModel.append({
++      pendingRows.push({
+         itemId: "dmenu." + i,
+         kind: "dmenu",
+         icon: icon,
+@@ -547,6 +610,9 @@
+       })
+     }
+ 
++    if (pendingRows.length > 0) displayModel.append(pendingRows)
++
++    root.perfMark("rows-appended(" + displayModel.count + ")")
+     layoutSerial += 1
+ 
+     if (displayModel.count === 0) selectedIndex = 0
+@@ -558,7 +624,20 @@
+     })
+   }
+ 
++  // Single entry point for both rebuild paths. The height suspension is
++  // applied here, in a try/finally, so no early return — and no throw out of
++  // a provider row builder — can leave the flag set and freeze the card at a
++  // stale height. Clearing it triggers exactly one real height pass.
+   function rebuildDisplay() {
++    root.suspendRowsHeight = true
++    try {
++      root.rebuildDisplayRows()
++    } finally {
++      root.suspendRowsHeight = false
++    }
++  }
++
++  function rebuildDisplayRows() {
+     if (root.dmenuActive) {
+       root.rebuildDmenuDisplay()
+       return
+@@ -627,7 +706,9 @@
+       }
+     }
+ 
+-    for (var k = 0; k < rows.length; k++) displayModel.append(rows[k])
++    // One append for the same reason as the dmenu path above: rowListHeight()
++    // is O(rows) and re-runs on every count change.
++    if (rows.length > 0) displayModel.append(rows)
+     layoutSerial += 1
+ 
+     if (displayModel.count === 0) selectedIndex = 0
+@@ -832,11 +913,48 @@
+     selectedIndex = 0
+     cursorActive = mode !== "input"
+     root.disarmPointer()
++    root.perfMark("props-set(" + dmenuOptions.length + "opts)")
+     opened = true
++    root.perfMark("opened=true")
+     rebuildDisplay()
++    root.perfMark("rebuildDisplay-done")
+ 
+     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+   }
++  // ------------------------------------------------------- fast open channel
++  //
++  // `omarchy-shell shell summon omarchy.menu <payload>` has to spawn the `qs`
++  // client, and that Qt process costs ~90ms of dynamic linking before a
++  // single byte of payload moves — more than everything else on the SUPER+K
++  // path put together. A Unix socket lets a caller hand over the same payload
++  // with socat in ~2ms.
++  //
++  // The socket lives in XDG_RUNTIME_DIR (mode 0700), so it is reachable only
++  // by this user — the same trust boundary the qs ipc socket already has, and
++  // it carries the same payloads. Callers that cannot reach it fall back to
++  // qs ipc, which keeps working unchanged.
++  //
++  // Protocol: one line of JSON per connection, exactly the payload
++  // shell.summon() takes. Routing through shell.summon rather than open()
++  // keeps the host's open-panel bookkeeping identical on both paths.
++  SocketServer {
++    active: true
++    path: Quickshell.env("XDG_RUNTIME_DIR") + "/omarchy-menu-open.sock"
++
++    handler: Socket {
++      parser: SplitParser {
++        onRead: function(line) {
++          var payload = String(line || "").trim()
++          if (!payload) return
++          if (root.shell && typeof root.shell.summon === "function")
++            root.shell.summon("omarchy.menu", payload)
++          else
++            root.open(payload)
++        }
++      }
++    }
++  }
++
+   ListModel { id: displayModel }
+ 
+   // ----------------------------------------------------------- route surface

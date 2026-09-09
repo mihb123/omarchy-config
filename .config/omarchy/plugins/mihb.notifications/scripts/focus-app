@@ -1,0 +1,77 @@
+#!/bin/bash
+#
+# Focus the Hyprland window a notification came from.
+#
+# Replaces omarchy-hyprland-focus-app, which feeds the notification's app name
+# straight into jq's test() as a regex against .class. That misses the common
+# case where app name and window class spell the same app differently
+# ("Google Chrome" vs class "google-chrome"), and an app name carrying regex
+# metacharacters makes the whole filter fail silently.
+#
+# Matching here is by normalized substring: lowercase both sides and drop
+# everything that is not a letter or digit, so "Google Chrome" and
+# "google-chrome" both reduce to "googlechrome". No regex, so no app name can
+# break the query.
+#
+# Usage: focus-app <app-name> [app-icon]
+#
+# app-icon is the notification's icon hint. It is frequently the desktop entry
+# name (google-chrome, org.telegram.desktop) and so matches the window class
+# when the human-readable app name does not.
+
+set -uo pipefail
+
+app=${1:-}
+icon=${2:-}
+[[ -n $app || -n $icon ]] || exit 1
+
+address=$(
+  hyprctl clients -j 2>/dev/null |
+    jq -r --arg app "$app" --arg icon "$icon" '
+      def norm: (. // "") | ascii_downcase | gsub("[^a-z0-9]"; "");
+
+      # Needles from the notification, longest first so a specific desktop
+      # entry ("org.telegram.desktop") outranks a short generic app name.
+      # Under 2 characters they would match almost any class, so drop them.
+      ([($app | norm),
+        ($icon | norm),
+        ($icon | split(".") | last // "" | norm)]
+       | map(select(length >= 2)) | unique | sort_by(-length)) as $needles
+
+      # Most recently focused window first, so an app with several windows
+      # gets the one the user last had open.
+      | ([ .[] | {
+            address,
+            order: (.focusHistoryID // 9999),
+            # initialTitle is consulted only for agent terminals, which all
+            # share the class org.omarchy.agent and carry the terminal name
+            # in the title. Matching titles in general would false-positive
+            # on every terminal showing a path.
+            haystacks: [(.class | norm), (.initialClass | norm)]
+              + (if .initialClass == "org.omarchy.agent"
+                 then [(.initialTitle | norm)] else [] end)
+              | map(select(length > 0))
+          } ] | sort_by(.order)) as $clients
+
+      | first(
+          $needles[] as $n
+          | $clients[]
+          # Bind the haystack: inside `$n | contains(...)` the input is $n
+          # itself, so `.` there is NOT the haystack.
+          | select(any(.haystacks[]; . as $h
+              | ($h | contains($n))
+                # The reverse direction catches an app name that is longer
+                # than its class ("Visual Studio Code" vs class "code").
+                # Held to 3+ characters so a stubby class cannot match
+                # everything.
+                or (($h | length) >= 3 and ($n | contains($h)))))
+        ).address // empty
+    ' 2>/dev/null
+)
+
+[[ -n $address ]] || exit 1
+
+# hl.dsp.focus is the current dispatcher; focuswindow is kept as the fallback
+# for the same reason upstream keeps it.
+hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null 2>&1 ||
+  hyprctl dispatch focuswindow "address:$address" >/dev/null 2>&1

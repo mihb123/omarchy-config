@@ -1,0 +1,97 @@
+{
+  "bar": {
+    "centerAnchor": "omarchy.clock",
+    "layout": {
+      "center": [
+        {
+          "id": "mihb.indicators"
+        },
+        {
+          "id": "omarchy.clock",
+          "format": "dddd HH:mm",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "verticalFormat": "HH\n—\nmm",
+          "birthYear": 1999,
+          "lifeExpectancy": 80
+        },
+        {
+          "id": "omarchy.weather"
+        },
+        {
+          "id": "omarchy.system-update"
+        }
+      ],
+      "left": [
+        {
+          "id": "workspaces"
+        },
+        {
+          "id": "runcat"
+        },
+        {
+          "exec": "~/.config/omarchy/bar/scripts/ram-status",
+          "id": "ram",
+          "interval": 2,
+          "onClick": "omarchy-launch-or-focus-tui btop",
+          "tooltip": "Memory Usage\nleft — System Monitor (btop)",
+          "type": "command"
+        }
+      ],
+      "right": [
+        {
+          "exec": "~/.config/omarchy/bar/scripts/ime-status",
+          "id": "ime",
+          "interval": 1,
+          "onClick": "fcitx5-remote -t",
+          "onRightClick": "unikey-macros",
+          "onMiddleClick": "unikey-macros reload",
+          "type": "command"
+        },
+        {
+          "id": "notifications",
+          "type": "qml"
+        },
+        {
+          "id": "omarchy.tray",
+          "hidden": [
+            "Fcitx"
+          ]
+        },
+        {
+          "id": "quick-settings"
+        },
+        {
+          "id": "omarchy.power",
+          "showPercentage": true
+        },
+        {
+          "id": "shortcut-tooltips",
+          "type": "qml"
+        }
+      ]
+    },
+    "position": "top",
+    "transparent": false
+  },
+  "idle": {
+    "lock": 300,
+    "screensaver": 150
+  },
+  "plugins": [
+    {
+      "id": "mihb.menu"
+    },
+    {
+      "id": "mihb.notifications"
+    }
+  ],
+  "version": 1,
+  "disabledPlugins": [
+    "omarchy.menu",
+    "omarchy.notifications"
+  ],
+  "cloneSourceRestores": [
+    "mihb.menu",
+    "mihb.notifications"
+  ]
+}

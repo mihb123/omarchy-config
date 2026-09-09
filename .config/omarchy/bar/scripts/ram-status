@@ -1,0 +1,7 @@
+#!/bin/bash
+awk '/MemTotal/ {t=$2} /MemAvailable/ {a=$2} END {
+    used=(t-a)/1024/1024;
+    total=t/1024/1024;
+    pct=(t-a)/t*100;
+    printf "{\"text\":\"RAM %.0f%%\",\"tooltip\":\"RAM: %.1f / %.1f GiB (%.0f%%)\\nleft — System Monitor (btop)\",\"class\":\"%s\"}\n", pct, used, total, pct, (pct>=85?"active":"")
+}' /proc/meminfo

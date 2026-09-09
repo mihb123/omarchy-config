@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+import subprocess, json
+
+def run(cmd, timeout=0.6):
+    try:
+        return subprocess.check_output(cmd, text=True, timeout=timeout).strip()
+    except Exception:
+        return ""
+
+def get_status():
+    # 1. Wi-Fi
+    wifi_line = ""
+    for line in run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev"]).splitlines():
+        parts = line.split(":")
+        if len(parts) >= 3 and parts[1] == "wifi":
+            wifi_line = line
+            break
+
+    wifi_connected = False
+    wifi_ssid = "Disconnected"
+    if wifi_line:
+        parts = wifi_line.split(":")
+        if len(parts) >= 3 and parts[2] == "connected":
+            wifi_connected = True
+            wifi_ssid = parts[3] if len(parts) > 3 and parts[3] else "Connected"
+    else:
+        radio = run(["nmcli", "radio", "wifi"])
+        wifi_ssid = "Off" if radio != "enabled" else "Disconnected"
+
+    # 2. Bluetooth
+    bt_out = run(["bluetoothctl", "show"])
+    bt_powered = "Powered: yes" in bt_out
+    bt_dev = "Off"
+    if bt_powered:
+        conn = run(["bluetoothctl", "devices", "Connected"]).splitlines()
+        bt_dev = conn[0].split(" ", 2)[-1] if conn else "On"
+
+    # 3. Audio
+    vol_str = run(["pamixer", "--get-volume"])
+    vol = int(vol_str) if vol_str.isdigit() else 50
+    muted = run(["pamixer", "--get-mute"]) == "true"
+
+    # 4. Brightness
+    b_out = run(["brightnessctl", "-m"])
+    bright = 50
+    if b_out and "," in b_out:
+        try:
+            bright = int(b_out.split(",")[3].replace("%", ""))
+        except Exception:
+            pass
+
+    # 5. Tailscale
+    ts_out = run(["tailscale", "status"])
+    ts_lines = ts_out.splitlines() if ts_out else []
+    ts_first = ts_lines[0].split() if ts_lines else []
+    ts_ip = ts_first[0] if ts_first else ""
+    ts_connected = bool(ts_ip and ts_ip.startswith("100."))
+
+    # 6. Display / Nightlight
+    mon_name = "eDP-1"
+    try:
+        mons_raw = run(["hyprctl", "monitors", "-j"])
+        if mons_raw:
+            mons = json.loads(mons_raw)
+            if mons:
+                mon_name = mons[0].get("name", "eDP-1")
+    except Exception:
+        pass
+
+    nl_out = run(["omarchy", "toggle", "nightlight", "--status"])
+    nl_active = False
+    if nl_out:
+        try:
+            nl_active = json.loads(nl_out).get("enabled", False)
+        except Exception:
+            pass
+
+    return {
+        "wifi": {
+            "connected": wifi_connected,
+            "ssid": wifi_ssid
+        },
+        "bluetooth": {
+            "powered": bt_powered,
+            "device": bt_dev
+        },
+        "audio": {
+            "volume": vol,
+            "muted": muted
+        },
+        "brightness": {
+            "percent": bright
+        },
+        "tailscale": {
+            "connected": ts_connected,
+            "ip": ts_ip
+        },
+        "display": {
+            "name": mon_name,
+            "nightlight": nl_active
+        }
+    }
+
+if __name__ == "__main__":
+    print(json.dumps(get_status()))

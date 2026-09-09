@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "runcat",
+  "name": "RunCat",
+  "version": "1.0.0",
+  "author": "win0err",
+  "description": "The cat tells you the CPU usage by running speed",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "RunCat.qml"
+  },
+  "barWidget": {
+    "displayName": "RunCat",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "center"
+  }
+}
