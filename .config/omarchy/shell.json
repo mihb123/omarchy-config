@@ -67,6 +67,34 @@
         {
           "id": "shortcut-tooltips",
           "type": "qml"
+        },
+        {
+          "id": "user.trackpad-gestures",
+          "captureAction": "screenshot",
+          "captureTrigger": "none",
+          "clickMethod": "clickfinger",
+          "enabled": true,
+          "f2_down": "none",
+          "f2_left": "none",
+          "f2_pinchin": "none",
+          "f2_pinchout": "none",
+          "f2_right": "none",
+          "f2_up": "none",
+          "f3_down": "fit_active",
+          "f3_left": "workspace",
+          "f3_pinchin": "none",
+          "f3_pinchout": "none",
+          "f3_right": "workspace",
+          "f3_up": "fit_all",
+          "f4_down": "volume_down",
+          "f4_left": "brightness_down",
+          "f4_pinchin": "none",
+          "f4_pinchout": "none",
+          "f4_right": "brightness_up",
+          "f4_up": "volume_up",
+          "screenshotEditor": false,
+          "selectedFingers": 3,
+          "tapMap": "lrm"
         }
       ]
     },
