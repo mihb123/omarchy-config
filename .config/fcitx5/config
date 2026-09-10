@@ -10,9 +10,9 @@ EnumerateWithTriggerKeys=True
 # fcitx5 only fires modifier-only hotkeys on key *release*, and Hyprland 0.56.2
 # drops modifier release events to the input method keyboard grab
 # (hyprwm/Hyprland#15886). Ctrl+Shift is handled in ~/.config/hypr/bindings.lua
-# instead. Ctrl+Space below is a fallback that goes through fcitx5 directly.
+# instead. Ctrl+Space is reserved for the tmux prefix; no Fcitx trigger here.
 [Hotkey/TriggerKeys]
-0=Control+space
+0=
 
 [Hotkey/EnumerateForwardKeys]
 0=

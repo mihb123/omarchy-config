@@ -1,4 +1,10 @@
 #!/bin/bash
-# Version control for this machine's config. Bare repo at ~/.dotfiles, work-tree $HOME.
-#   cfg status / cfg diff / cfg log --stat / cfg add <file> / cfg commit -m "..."
+# Version control cho config của máy này.
+#   Repo (lịch sử):  ~/.dotfiles        Work-tree (file thật):  $HOME
+#
+#   cfg save                 stage + commit MỌI thay đổi (kể cả file mới)
+#   cfg save -n              xem trước, không commit
+#   cfg save "thông điệp"    commit với thông điệp của bạn
+#   cfg <lệnh git khác>      status / diff / log / show / checkout ...
+[[ ${1-} == save ]] && { shift; exec cfg-save "$@"; }
 exec git --git-dir="$HOME/.dotfiles" --work-tree="$HOME" "$@"

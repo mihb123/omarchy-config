@@ -1,0 +1,12 @@
+#!/bin/bash
+# Trạng thái bộ gõ ở dạng gọn nhất có thể — widget gọi mỗi giây.
+#
+# state: 0 = ứng dụng đang focus không có ngữ cảnh nhập, 1 = tắt (EN),
+# 2 = bật (VI). Cấu hình chi tiết nằm ở `fcitx-ime status`, đắt hơn nhiều
+# nên widget chỉ gọi khi bộ gõ đổi hoặc khi mở panel.
+
+state=$(fcitx5-remote 2>/dev/null)
+[[ $state =~ ^[0-9]+$ ]] || state=-1
+im=$(fcitx5-remote -n 2>/dev/null)
+
+printf '{"state":%s,"im":"%s"}\n' "$state" "${im//\"/}"

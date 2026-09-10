@@ -134,6 +134,8 @@ fcft
 fcitx5
 fcitx5-configtool
 fcitx5-gtk
+fcitx5-lotus-bin
+fcitx5-lotus-bin-debug
 fcitx5-qt
 fcitx5-unikey
 fd
@@ -774,6 +776,7 @@ protobuf
 psmisc
 pugixml
 purpose
+pyside6
 python
 python-aaf2
 python-cairo
@@ -790,6 +793,7 @@ python-packaging
 python-poetry-core
 python-pycups
 python-pyxdg
+python-qtpy
 python-requests
 python-shtab
 python-termcolor
@@ -846,6 +850,7 @@ serd
 shaderc
 shadow
 shared-mime-info
+shiboken6
 signon-kwallet-extension
 signon-plugin-oauth2
 signon-ui

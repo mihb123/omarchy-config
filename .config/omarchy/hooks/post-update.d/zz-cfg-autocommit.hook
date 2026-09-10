@@ -1,13 +1,7 @@
 #!/bin/bash
-# After every `omarchy update`, snapshot machine state and commit any config
-# drift, so `cfg log --stat` and `cfg show HEAD` show exactly what changed.
+# Sau mỗi `omarchy update`: lưu lại đúng những gì update đã đổi trong config,
+# kể cả file MỚI do migration tạo ra. Xem lại bằng: cfg show HEAD
 set -uo pipefail
 command -v cfg >/dev/null || exit 0
-cfg-snapshot >/dev/null 2>&1
-cfg add -u >/dev/null 2>&1
-cfg add -f "$HOME/.local/share/system-manifest" >/dev/null 2>&1
-if ! cfg diff --cached --quiet; then
-  cfg commit -q -m "post-update: omarchy $(omarchy version 2>/dev/null || echo unknown)" \
-    -m "Auto-committed by post-update hook on $(date -Is)"
-  echo "cfg: committed post-update config drift (see: cfg show HEAD)"
-fi
+cfg save "post-update: omarchy $(omarchy version 2>/dev/null || echo unknown)" \
+  || echo "cfg: bỏ qua auto-commit (xem cảnh báo phía trên), chạy tay: cfg save"

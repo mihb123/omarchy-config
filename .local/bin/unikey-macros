@@ -1,6 +1,15 @@
 #!/bin/bash
 # unikey-macros — quản lý từ viết tắt cho fcitx5.
 #
+# Khai báo một lần, áp cho cả hai bộ gõ tiếng Việt: mỗi lần ghi, script gọi
+# `fcitx-ime sync-macros` để đẩy kho macro Unikey sang bảng macro của Lotus
+# (lotus-macro-table.conf) và bật EnableMacro cho Lotus. Kho Unikey ở đây là
+# nguồn duy nhất; đừng sửa bảng của Lotus bằng fcitx5-lotus-settings, lần
+# đồng bộ sau sẽ ghi đè.
+#
+# Khoá macro của Lotus chỉ nhận chữ và số, nên "~gt" được đẩy sang Lotus dưới
+# cả hai dạng "~gt" và "gt" — dạng nào Lotus chịu bung thì dùng dạng đó.
+#
 # Hai kho, vì giới hạn của chúng khác nhau:
 #
 #   macro Unikey   ~/.config/fcitx5/unikey/macro
@@ -60,7 +69,11 @@ reload_addon() {
 reload() {
   reload_addon unikey || die "không gọi được fcitx5 qua D-Bus (fcitx5 có đang chạy không?)"
   reload_addon quickphrase || true
+  # Đẩy sang Lotus; im lặng khi không có Lotus trong máy.
+  command -v fcitx-ime >/dev/null 2>&1 && fcitx-ime sync-macros --quiet || true
 }
+
+count_lotus() { fcitx-ime status 2>/dev/null | grep -o '"lotusMacroCount": *[0-9]*' | grep -o '[0-9]*' || true; }
 
 # ---------------------------------------------------------------- đọc / ghi
 
@@ -197,7 +210,7 @@ cmd_add() { # cmd_add <khoá> <nội dung>
     notify "Đã đổi “$renamed” thành “$key”" "Unikey xoá bộ đệm ở ký tự ${renamed:0:1} nên khoá cũ không bao giờ bung"
   fi
   if [[ $store == macro ]]; then
-    notify "Đã lưu macro “$key”" "$value — gõ $key rồi dấu cách (chế độ VI)"
+    notify "Đã lưu macro “$key”" "$value — gõ $key rồi dấu cách ở chế độ VI (Lotus + Unikey)"
   else
     notify "Đã lưu quick phrase “$key”" "$value — bấm Super+; rồi gõ $key"
   fi
@@ -212,7 +225,7 @@ cmd_rm() {
 
 cmd_reload() {
   reload
-  notify "Đã nạp lại fcitx5" "$(count_macro) macro · $(count_phrase) quick phrase"
+  notify "Đã nạp lại fcitx5" "$(count_macro) macro (Lotus: $(count_lotus)) · $(count_phrase) quick phrase"
 }
 
 cmd_edit() {
@@ -290,10 +303,10 @@ menu_main() {
     [[ -n $key ]] && rows+=("$ICON_PHRASE	$key	$value  ·  Super+;")
   done < <(phrase_entries)
   rows+=("$ICON_FILE	Mở file trong editor	$(count_macro) macro · $(count_phrase) quick phrase")
-  rows+=("$ICON_RELOAD	Nạp lại fcitx5	áp dụng thay đổi sửa tay")
-  rows+=("$ICON_GEAR	Cài đặt fcitx5	fcitx5-configtool")
+  rows+=("$ICON_RELOAD	Nạp lại fcitx5	đồng bộ lại sang Lotus + áp dụng sửa tay")
+  rows+=("$ICON_GEAR	Cài đặt bộ gõ	Lotus / fcitx5")
 
-  answer=$(printf '%s\n' "${rows[@]}" | pick "Từ viết tắt Unikey") || return 0
+  answer=$(printf '%s\n' "${rows[@]}" | pick "Từ viết tắt · Lotus + Unikey") || return 0
   field1=${answer%%$'\t'*}
   field2=${answer#*$'\t'}
   [[ $field2 == "$answer" ]] && field2=""
@@ -302,7 +315,7 @@ menu_main() {
     "Thêm từ viết tắt")     menu_add ;;
     "Mở file trong editor") cmd_edit ;;
     "Nạp lại fcitx5")       cmd_reload ;;
-    "Cài đặt fcitx5")       setsid fcitx5-configtool >/dev/null 2>&1 & ;;
+    "Cài đặt bộ gõ")        setsid fcitx5-lotus-settings >/dev/null 2>&1 & ;;
     *)
       # Hàng quick phrase mang thêm hậu tố gợi nhớ phím gọi, cắt đi.
       menu_entry "$field1" "${field2%'  ·  Super+;'}" ;;
@@ -333,7 +346,8 @@ unikey-macros — quản lý từ viết tắt cho fcitx5
 Khoá bắt đầu bằng ';' hoặc nội dung có emoji -> quick phrase:
 bấm Super+; rồi gõ khoá, chọn bằng dấu cách. Chạy ở cả VI lẫn EN.
 
-Còn lại -> macro Unikey: gõ khoá rồi dấu cách là tự bung, chỉ ở chế độ VI.
+Còn lại -> macro: gõ khoá rồi dấu cách là tự bung, chỉ ở chế độ VI. Mỗi lần
+ghi, macro được đồng bộ sang cả Lotus (fcitx-ime sync-macros).
 Khoá macro chỉ được dùng chữ, số và ~ ` ^ — Unikey xoá bộ đệm ở mọi dấu câu
 khác, nên "!gt" không bao giờ bung. Tiền tố ! ; . , sẽ được tự đổi thành ~.
 USAGE

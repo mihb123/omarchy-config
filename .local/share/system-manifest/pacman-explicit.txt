@@ -41,6 +41,7 @@ fastfetch
 fcitx5
 fcitx5-configtool
 fcitx5-gtk
+fcitx5-lotus-bin
 fcitx5-qt
 fcitx5-unikey
 fd

@@ -39,13 +39,7 @@
       ],
       "right": [
         {
-          "exec": "~/.config/omarchy/bar/scripts/ime-status",
-          "id": "ime",
-          "interval": 1,
-          "onClick": "fcitx5-remote -t",
-          "onRightClick": "unikey-macros",
-          "onMiddleClick": "unikey-macros reload",
-          "type": "command"
+          "id": "mihb.ime"
         },
         {
           "id": "notifications",
@@ -93,7 +87,7 @@
           "f4_right": "brightness_up",
           "f4_up": "volume_up",
           "screenshotEditor": false,
-          "selectedFingers": 3,
+          "selectedFingers": 2,
           "tapMap": "lrm"
         }
       ]

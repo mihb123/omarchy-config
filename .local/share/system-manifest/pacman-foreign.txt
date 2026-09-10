@@ -5,4 +5,6 @@ c-client
 c-client-debug
 electron27-bin
 electron27-bin-debug
+fcitx5-lotus-bin
+fcitx5-lotus-bin-debug
 google-chrome

@@ -1,6 +1,8 @@
+mihb.ime
 mihb.indicators
 mihb.menu
 mihb.notifications
 quick-settings
 runcat
+user.trackpad-gestures
 workspaces
