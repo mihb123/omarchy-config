@@ -1,0 +1,17 @@
+[general]
+annotation-size-factor = 2.0
+close-on-esc = true
+
+[keybinds]
+pointer = "v"
+crop = "x"
+brush = "z"
+line = "s"
+arrow = "a"
+rectangle = "r"
+ellipse = "e"
+text = "t"
+marker = "c"
+blur = "b"
+highlight = "w"
+spotlight = "g"

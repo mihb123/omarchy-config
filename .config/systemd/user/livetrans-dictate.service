@@ -1,0 +1,16 @@
+[Unit]
+Description=livetrans push-to-talk dictation
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/home/mihb/Work/trans/dictate daemon -l vi
+Restart=on-failure
+RestartSec=2
+# The decoder is the one thing here that measurably cares about its CPU share
+# under contention -- see the README, "Falling behind on a busy machine".
+CPUWeight=10000
+
+[Install]
+WantedBy=graphical-session.target

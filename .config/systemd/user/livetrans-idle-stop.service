@@ -1,0 +1,10 @@
+[Unit]
+Description=Release the livetrans dictation daemon when it has been idle
+Documentation=file:///home/mihb/Work/trans/README.md
+
+[Service]
+Type=oneshot
+# The idle grace period lives here -- change this number, then
+# `systemctl --user daemon-reload`.
+Environment=LIVETRANS_IDLE_S=600
+ExecStart=%h/.local/bin/livetrans-idle-stop

@@ -1,0 +1,13 @@
+[Unit]
+Description=Check whether the livetrans dictation daemon can be released
+
+[Timer]
+# Poll rather than react: the daemon has no idle signal, and the check is a few
+# milliseconds of bash. The daemon therefore dies between LIVETRANS_IDLE_S and
+# LIVETRANS_IDLE_S + 2min after the last take.
+OnStartupSec=5min
+OnUnitInactiveSec=2min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
