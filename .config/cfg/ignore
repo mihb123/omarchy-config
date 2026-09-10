@@ -1,0 +1,115 @@
+# ==========================================================================
+#  ~/.dotfiles/info/exclude — quyết định file nào được `cfg` theo dõi.
+#
+#  Tầng gốc $HOME:  CHẶN HẾT, mở từng file/thư mục cụ thể.
+#  ~/.config:       THEO DÕI HẾT, chỉ chặn những thứ liệt kê bên dưới.
+#                   -> tool mới (nvim, zellij, ...) tự động được theo dõi,
+#                      không phải sửa file này nữa.
+#  Quy tắc git: pattern khớp SAU CÙNG là pattern thắng.
+# ==========================================================================
+
+# ---------- tầng gốc: chặn hết rồi mở ----------
+/*
+!/.zshrc
+!/.bashrc
+!/.profile
+!/.zshenv
+!/.zprofile
+!/.inputrc
+
+# tài liệu về chính setup này
+!/Documents
+/Documents/*
+!/Documents/omarchy-custom-config-guide.md
+
+# ---------- ~/.config: theo dõi hết ----------
+!/.config
+
+# browser: nặng hàng GB + dữ liệu cá nhân
+/.config/google-chrome*/
+/.config/chromium/
+/.config/BraveSoftware/
+/.config/microsoft-edge*/
+/.config/firefox/
+/.config/vivaldi/
+
+# app nặng hoặc chỉ chứa state, không phải config
+/.config/Antigravity IDE/
+/.config/obsidian/
+/.config/nvm/
+/.config/Code/
+/.config/discord/
+/.config/Slack/
+/.config/spotify/
+/.config/dconf/
+/.config/menus/
+/.config/pulse/
+/.config/ibus/
+/.config/go/telemetry/
+
+# ---------- ~/.local: chỉ script + manifest ----------
+!/.local
+/.local/*
+!/.local/bin
+!/.local/share
+/.local/share/*
+!/.local/share/system-manifest
+
+# ---------- Claude Code: chỉ vài file cấu hình ----------
+!/.claude
+/.claude/*
+!/.claude/settings.json
+!/.claude/CLAUDE.md
+!/.claude/keybindings.json
+
+# ==========================================================================
+#  Rác nằm BÊN TRONG các vùng đã mở. Đặt cuối để thắng mọi rule trên.
+# ==========================================================================
+
+# backup do `omarchy refresh` và do tôi tạo
+*.bak
+*.bak.*
+*.baseline
+*.old
+*.orig
+*~
+*.swp
+
+# log / state / cache đổi liên tục
+*.log
+*.jsonl
+*.pid
+*.sock
+*cache*
+*Cache*
+session.json
+.backups/
+.config/fcitx5/conf/cached_layouts
+.config/fcitx/dbus/
+
+# ảnh raster: wallpaper tải lại được, chỉ làm phình git. SVG thì giữ.
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.gif
+*.mp4
+*.ttf
+*.otf
+
+# ELF binary trong .local/bin
+/.local/bin/agy
+/.local/bin/uv
+/.local/bin/uvx
+/.local/bin/omawrite
+
+# secret
+*.key
+*.pem
+*_rsa
+*_ed25519
+.netrc
+
+# ---------- repo git riêng: `cfg save` tự ghi thêm vào đây ----------
+bin/
+.config/omarchy/plugins/user.trackpad-gestures/
