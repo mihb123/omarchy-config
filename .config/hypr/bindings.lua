@@ -28,7 +28,18 @@
 -- o.bind("SUPER + H", nil, "voxtype record toggle")
 -- o.bind("SUPER + PERIOD", nil, "omarchy-shell shell toggle omarchy.emojis")
 
--- Toggle Vietnamese input (fcitx5 / Unikey) with Ctrl+Shift.
+-- Cycle the input method (English -> Lotus -> Unikey) with Ctrl+Shift.
+--
+-- fcitx5-remote -t only ever toggles the group on and off, so it cannot reach a
+-- third profile. The cycle walks all three in order and records the choice for
+-- the focused window; fcitx-ime-window.service puts that profile back whenever
+-- you return to the window. See ~/.local/bin/fcitx-ime.
+--
+-- fcitx-ime-cycle, not `fcitx-ime cycle`: it signals the running daemon, which
+-- already has the interpreter warm (~5ms, same as the old fcitx5-remote -t).
+-- Starting a fresh Python just to import json and subprocess costs ~85ms --
+-- long enough to swallow the first keystroke after the shortcut. It falls back
+-- to the slow path on its own if the daemon is not running.
 --
 -- Why this lives here instead of in fcitx5's "Trigger Input Method" hotkey:
 -- Hyprland 0.56.2 delivers modifier *press* events to the input method's
@@ -49,10 +60,12 @@
 -- while Ctrl+Shift is held shadows these binds, so Ctrl+Shift+C, Ctrl+Shift+V
 -- and friends do not toggle the input method.
 local vi_toggle = { release = true, non_consuming = true }
-o.bind("CTRL + SHIFT + Shift_L", "Toggle Vietnamese input", "fcitx5-remote -t", vi_toggle)
-o.bind("CTRL + SHIFT + Shift_R", "Toggle Vietnamese input", "fcitx5-remote -t", vi_toggle)
-o.bind("CTRL + SHIFT + Control_L", "Toggle Vietnamese input", "fcitx5-remote -t", vi_toggle)
-o.bind("CTRL + SHIFT + Control_R", "Toggle Vietnamese input", "fcitx5-remote -t", vi_toggle)
+-- Absolute path: Hyprland's exec does not inherit the login shell's PATH.
+local ime_cycle = os.getenv("HOME") .. "/.local/bin/fcitx-ime-cycle"
+o.bind("CTRL + SHIFT + Shift_L", "Cycle input method", ime_cycle, vi_toggle)
+o.bind("CTRL + SHIFT + Shift_R", "Cycle input method", ime_cycle, vi_toggle)
+o.bind("CTRL + SHIFT + Control_L", "Cycle input method", ime_cycle, vi_toggle)
+o.bind("CTRL + SHIFT + Control_R", "Cycle input method", ime_cycle, vi_toggle)
 
 -- Faster Keybindings menu (SUPER+K): ~460ms -> ~135ms.
 --
@@ -133,3 +146,6 @@ o.bind("SUPER + SHIFT + F10", "Dictation en (toggle)", os.getenv("HOME") .. "/Wo
 -- Config file: ~/.config/omarchy/transparency.conf
 hl.unbind("SUPER + BACKSPACE")
 o.bind("SUPER + BACKSPACE", "Cycle window transparency", os.getenv("HOME") .. "/bin/omarchy-hyprland-window-transparency-toggle")
+
+-- Keyboard-driven mouse pointer (SUPER + M). See hypr/mouse-keys.lua.
+require("hypr.mouse-keys")

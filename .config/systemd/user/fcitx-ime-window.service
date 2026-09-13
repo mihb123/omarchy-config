@@ -1,0 +1,25 @@
+[Unit]
+Description=Nhớ bộ gõ fcitx5 theo từng cửa sổ Hyprland
+# Nghe activewindowv2 trên .socket2.sock của Hyprland và đặt lại profile bộ gõ
+# (English / Lotus / Unikey) mà cửa sổ đó dùng lần trước. Cửa sổ chưa từng thấy
+# thì lấy profile lần cuối của cùng app; app chưa từng gõ tiếng Việt thì English.
+#
+# Cần cả compositor lẫn fcitx5: địa chỉ cửa sổ đến từ Hyprland, còn việc đổi bộ
+# gõ đi qua fcitx5-remote.
+After=graphical-session.target omarchy-fcitx5.service
+PartOf=graphical-session.target
+# After= chỉ là thứ tự, không ngăn unit chạy khi chưa có phiên đồ hoạ. Không có
+# HYPRLAND_INSTANCE_SIGNATURE thì daemon chẳng có socket nào để nghe, nên bỏ
+# qua hẳn lần start đó thay vì để nó chết đi sống lại.
+ConditionEnvironment=HYPRLAND_INSTANCE_SIGNATURE
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/fcitx-ime watch
+# Hyprland đóng socket2 khi thoát; đó là exit 0 nhưng vẫn là mất theo dõi, nên
+# always chứ không phải on-failure. PartOf ở trên lo việc dừng hẳn khi hết phiên.
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

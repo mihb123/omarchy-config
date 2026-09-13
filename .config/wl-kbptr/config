@@ -1,0 +1,61 @@
+# wl-kbptr — keyboard pointer targeting.
+# Run `wl-kbptr --help-config` for every option and its default.
+#
+# The modes are chosen per keybinding in ~/.config/hypr/mouse-keys.lua, so the
+# `modes` line here is only the fallback for a bare `wl-kbptr` invocation.
+
+[general]
+modes=tile,bisect
+
+[mode_tile]
+label_symbols=asdfghjklqwertyuiopzxcvbnm
+
+# Tiles cover the whole screen, so an amber fill like the floating mode's would
+# just tint everything. Dim hard instead and let heavy white labels carry it.
+label_font_family=JetBrainsMono Nerd Font
+label_font_size=15 40% 48
+label_color=#ffffffff
+label_select_color=#ffcf4dff
+unselectable_bg_color=#0000007a
+selectable_bg_color=#0000004d
+selectable_border_color=#ffffff40
+
+[mode_floating]
+source=detect
+label_symbols=asdfghjklqwertyuiopzxcvbnm
+
+# Detection has no tunables -- it keeps every contour 4-49px tall and 8-499px
+# wide -- so a text-heavy page yields a couple of hundred targets. The label is
+# drawn centred in the whole rectangle and there is no separate badge to style,
+# so the rectangle fill is the label's only backing. Keep it dark enough to
+# guarantee contrast against whatever is underneath, but light enough to read
+# the content through.
+label_font_family=JetBrainsMono Nerd Font
+label_font_size=15 45% 34
+label_color=#ffd54fff
+label_select_color=#ff5252ff
+unselectable_bg_color=#00000047
+selectable_bg_color=#00000080
+selectable_border_color=#ffd54f59
+
+[mode_bisect]
+# Only a handful of labels on screen here, so they can be large and plain.
+label_font_family=JetBrainsMono Nerd Font
+label_font_size=24
+label_padding=12
+label_color=#ffd54fff
+unselectable_bg_color=#00000073
+even_area_bg_color=#0000001a
+even_area_border_color=#ffd54f40
+odd_area_bg_color=#00000040
+odd_area_border_color=#ffd54f26
+history_border_color=#ffd54f59
+pointer_size=18
+pointer_color=#ff5252ee
+
+[mode_split]
+pointer_size=18
+pointer_color=#ffcc00dd
+
+[mode_click]
+button=left

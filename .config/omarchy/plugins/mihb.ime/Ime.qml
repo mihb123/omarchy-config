@@ -6,7 +6,7 @@ import qs.Ui
 
 // Widget bộ gõ trên bar.
 //
-//   trái   — đổi giữa tiếng Việt (Lotus/Unikey) và tiếng Anh (bàn phím US)
+//   trái   — đi vòng English → Lotus → Unikey, cùng việc với Ctrl+Shift
 //   phải   — panel cài đặt của đúng bộ gõ đang dùng
 //   giữa   — nạp lại fcitx5 và đồng bộ lại từ viết tắt
 //
@@ -26,8 +26,12 @@ import qs.Ui
 //     sang EN và panel bày cài đặt bàn phím US;
 //   * bật/tắt tiếng Việt hoãn tới lúc panel đóng, khi focus đã về ứng dụng —
 //     gọi ngay thì chỉ đổi ngữ cảnh của panel, ứng dụng không nhận gì;
-//   * đổi bộ máy (Lotus/Unikey) thì đổi ngay được, vì fcitx5 chọn input
-//     method cho cả group chứ không theo từng ngữ cảnh.
+//   * đổi giữa Lotus và Unikey thì đổi ngay được, vì fcitx5 chọn input
+//     method cho cả group chứ không theo từng ngữ cảnh. Chỉ khi English có
+//     mặt ở một đầu mới phải hoãn.
+//
+// Profile của từng cửa sổ do fcitx-ime-window.service nhớ; widget chỉ đọc
+// trạng thái hiện tại, không tự khôi phục gì.
 Panel {
   id: root
   moduleName: "mihb.ime"
@@ -43,9 +47,10 @@ Panel {
 
   property int imeState: -1
   property string im: ""
-  property string mode: "unknown"      // "vi" | "en" | "unknown"
-  property string lastMode: "vi"
-  property string engine: "lotus"      // lotus | unikey | keyboard-us
+  // Profile là bộ gõ nhìn từ phía người dùng: "en" | "lotus" | "unikey".
+  // Rỗng nghĩa là ứng dụng đang focus không có ngữ cảnh nhập.
+  property string profile: ""
+  property string lastProfile: "lotus"
   property string addon: "lotus"       // lotus | unikey | keyboard
   property string viEngine: "lotus"
   property var values: ({})
@@ -53,21 +58,43 @@ Panel {
   property int phraseCount: 0
   property bool hasLotus: true
   property bool hasUnikey: false
-  property string pendingMode: ""      // mode chờ áp dụng khi panel đóng
-  property string modeOnOpen: ""       // mode lúc mở panel
+  property string pendingProfile: ""   // profile chờ áp dụng khi panel đóng
+  property string profileOnOpen: ""    // profile lúc mở panel
 
   // Panel đang giữ focus bàn phím (và một nhịp sau khi đóng, chờ compositor
   // trả focus về ứng dụng): trạng thái fcitx5 đọc được lúc này là của panel.
   readonly property bool statusFrozen: opened || refocusGrace.running
 
-  readonly property string shownMode: mode === "unknown" ? lastMode : mode
-  readonly property bool vietnamese: shownMode === "vi"
-  readonly property bool noContext: mode === "unknown"
+  readonly property string shownProfile: profile === "" ? lastProfile : profile
+  readonly property bool vietnamese: shownProfile !== "en"
+  readonly property bool noContext: profile === ""
+  readonly property string engine: shownProfile === "en" ? "keyboard-us" : shownProfile
   readonly property string modeLabel: vietnamese ? "Tiếng Việt" : "English"
-  readonly property string engineLabel: engine === "lotus" ? "Lotus"
-    : (engine === "unikey" ? "Unikey" : "Bàn phím US")
+  readonly property string engineLabel: shownProfile === "en"
+    ? "Bàn phím US" : root.labelFor(shownProfile)
   readonly property string methodLabel: String(values.InputMethod || "")
   readonly property string charsetLabel: String(values.OutputCharset || "")
+
+  // Vòng Ctrl+Shift, bỏ qua bộ gõ không có trong group fcitx5.
+  readonly property var profileRing: {
+    var ring = ["en"]
+    if (root.hasLotus) ring.push("lotus")
+    if (root.hasUnikey) ring.push("unikey")
+    return ring
+  }
+
+  readonly property string nextProfile: {
+    var ring = root.profileRing
+    var at = ring.indexOf(root.shownProfile)
+    return ring[(at < 0 ? 0 : at + 1) % ring.length]
+  }
+
+  readonly property string badge: root.shownProfile === "en" ? "EN"
+    : (root.shownProfile === "unikey" ? "VI·U" : "VI·L")
+
+  function labelFor(name) {
+    return name === "en" ? "English" : (name === "unikey" ? "Unikey" : "Lotus")
+  }
 
   // ------------------------------------------------------------- trạng thái
 
@@ -81,24 +108,20 @@ Panel {
       return
     }
 
-    var previousEngine = root.engine
-    var previousMode = root.mode
+    var previous = root.profile
 
     root.imeState = Number(data.state)
     root.im = String(data.im || "")
 
-    if (root.imeState === 2) {
-      root.mode = "vi"
-      root.engine = (root.im === "unikey" || root.im === "lotus") ? root.im : root.viEngine
-    } else if (root.imeState === 1) {
-      root.mode = "en"
-      root.engine = "keyboard-us"
-    } else {
-      root.mode = "unknown"
-    }
+    if (root.imeState === 2)
+      root.profile = (root.im === "unikey" || root.im === "lotus") ? root.im : root.viEngine
+    else if (root.imeState === 1)
+      root.profile = "en"
+    else
+      root.profile = ""
 
-    if (root.mode !== "unknown") root.lastMode = root.mode
-    if (root.engine !== previousEngine || root.mode !== previousMode) root.refreshDetail()
+    if (root.profile !== "") root.lastProfile = root.profile
+    if (root.profile !== previous) root.refreshDetail()
   }
 
   function applyDetail(raw) {
@@ -125,33 +148,25 @@ Panel {
   // ------------------------------------------------------------- thao tác
 
   // Vẽ ngay trạng thái mong đợi, để nhãn và panel không phải đợi vòng đọc.
-  function paintMode(target) {
-    root.mode = target === "en" ? "en" : "vi"
-    root.engine = target === "en" ? "keyboard-us"
-      : ((target === "lotus" || target === "unikey") ? target : root.viEngine)
-    root.lastMode = root.mode
+  function paintProfile(target) {
+    root.profile = target
+    root.lastProfile = target
     root.refreshDetail()
   }
 
-  function switchMode(target) {
-    if (root.opened) {
-      // Panel còn giữ focus: ghi nhận rồi áp dụng khi đóng (xem đầu file).
-      root.pendingMode = target
-      root.paintMode(target)
+  function switchProfile(target) {
+    // Bật/tắt bộ gõ tính theo từng ngữ cảnh nhập, mà panel mở thì đang giữ
+    // ngữ cảnh của chính nó: mọi lượt đổi có English ở một đầu phải hoãn tới
+    // lúc panel đóng (xem đầu file). Lotus ↔ Unikey thì đổi ngay được.
+    if (root.opened && (target === "en" || root.shownProfile === "en")) {
+      root.pendingProfile = target
+      root.paintProfile(target)
       return
     }
 
     Util.execArgv([root.imeTool, "switch", target])
-    root.paintMode(target)
-    statusDelay.restart()
-  }
-
-  // Bộ máy là input method của cả group, không tính theo ngữ cảnh nhập, nên
-  // đổi được ngay cả khi panel đang giữ focus bàn phím.
-  function switchEngine(name) {
-    Util.execArgv([root.imeTool, "switch", name])
-    root.engine = name
-    root.refreshDetail()
+    root.paintProfile(target)
+    if (!root.opened) statusDelay.restart()
   }
 
   function setValue(key, value) {
@@ -216,8 +231,8 @@ Panel {
     interval: 150
     repeat: false
     onTriggered: {
-      var target = root.pendingMode
-      root.pendingMode = ""
+      var target = root.pendingProfile
+      root.pendingProfile = ""
       if (target === "") return
       Util.execArgv([root.imeTool, "switch", target])
       refocusGrace.restart()
@@ -245,8 +260,8 @@ Panel {
   onOpenedChanged: {
     if (opened) {
       tooltip.shown = false
-      root.modeOnOpen = root.shownMode
-      root.pendingMode = ""
+      root.profileOnOpen = root.shownProfile
+      root.pendingProfile = ""
       root.refreshDetail()
       return
     }
@@ -254,8 +269,8 @@ Panel {
     refocusGrace.restart()
     // Đổi đi rồi đổi về chỗ cũ thì khỏi làm gì: `switch vi` còn bật bộ gõ cho
     // ngữ cảnh đang tắt, nên chạy lại vẫn là một thay đổi thật.
-    if (root.pendingMode !== "" && root.pendingMode !== root.modeOnOpen) pendingDelay.restart()
-    else root.pendingMode = ""
+    if (root.pendingProfile !== "" && root.pendingProfile !== root.profileOnOpen) pendingDelay.restart()
+    else root.pendingProfile = ""
   }
 
   // ------------------------------------------- thành phần dùng lại trong panel
@@ -437,12 +452,17 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.vietnamese ? "VI" : "EN"
+    text: root.badge
     active: root.vietnamese
     activeColor: Color.accent
     dimmed: root.noContext
     fontSize: Style.font.body
     horizontalMargin: 7.5
+    // Ba nhãn không bằng nhau về bề ngang; đặt sẵn theo nhãn rộng nhất để
+    // phần bar bên trái không xê dịch mỗi lần đổi bộ gõ. Bar dọc thì bề ngang
+    // do barSize quyết định, để WidgetButton tự lo.
+    fixedWidth: (root.bar && root.bar.vertical)
+      ? -1 : Math.ceil(widestBadge.width + Style.spaceReal(7.5) * 2)
     // Tooltip mặc định của bar là text phẳng, căn giữa; thẻ hover bên dưới
     // thay chỗ nó nên để trống ở đây.
     tooltipText: ""
@@ -452,10 +472,17 @@ Panel {
       if (pressedButton === Qt.RightButton) root.toggle()
       else if (pressedButton === Qt.MiddleButton) Util.execArgv([root.imeTool, "reload", "--notify"])
       else {
-        root.switchMode(root.vietnamese ? "en" : "vi")
+        root.switchProfile(root.nextProfile)
         if (root.opened) root.close()
       }
     }
+  }
+
+  TextMetrics {
+    id: widestBadge
+    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+    font.pixelSize: Style.font.body
+    text: "VI·U"
   }
 
   Timer {
@@ -588,7 +615,7 @@ Panel {
           columnSpacing: Style.space(10)
 
           HintKey { text: "Trái · Ctrl+Shift" }
-          HintText { text: root.vietnamese ? "sang English" : "sang Tiếng Việt" }
+          HintText { text: "sang " + root.labelFor(root.nextProfile) }
 
           HintKey { text: "Phải" }
           HintText { text: "cài đặt " + root.engineLabel }
@@ -649,12 +676,14 @@ Panel {
           width: parent.width
           spacing: Style.space(6)
           focusable: false
-          value: root.shownMode
-          options: [
-            { value: "vi", label: "Tiếng Việt" },
-            { value: "en", label: "English" }
-          ]
-          onChanged: function(next) { root.switchMode(next) }
+          value: root.shownProfile
+          options: {
+            var list = [{ value: "en", label: "English" }]
+            if (root.hasLotus) list.push({ value: "lotus", label: "Lotus" })
+            if (root.hasUnikey) list.push({ value: "unikey", label: "Unikey" })
+            return list
+          }
+          onChanged: function(next) { root.switchProfile(next) }
         }
 
         PanelSeparator {}
@@ -665,26 +694,6 @@ Panel {
           width: parent.width
           spacing: Style.space(2)
           visible: root.vietnamese
-
-          PanelSectionHeader {
-            text: "Bộ máy"
-            visible: root.hasLotus && root.hasUnikey
-          }
-
-          ButtonGroup {
-            width: parent.width
-            spacing: Style.space(6)
-            focusable: false
-            visible: root.hasLotus && root.hasUnikey
-            value: root.engine
-            options: [
-              { value: "lotus", label: "Lotus" },
-              { value: "unikey", label: "Unikey" }
-            ]
-            onChanged: function(next) { root.switchEngine(next) }
-          }
-
-          Item { width: 1; implicitHeight: Style.space(6); visible: root.hasLotus && root.hasUnikey }
 
           ChoiceRow {
             label: "Kiểu gõ"

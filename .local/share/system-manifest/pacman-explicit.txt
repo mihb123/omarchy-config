@@ -75,6 +75,7 @@ intel-media-driver
 intel-ucode
 inxi
 jq
+kdeconnect
 kdenlive
 kernel-modules-hook
 keychain
@@ -104,7 +105,9 @@ mpv-mpris
 nautilus
 nautilus-python
 networkmanager
+nextcloud-client
 nginx
+nmap
 noto-fonts
 noto-fonts-cjk
 noto-fonts-emoji
@@ -143,6 +146,7 @@ slurp
 socat
 sof-firmware
 spotify
+sshfs
 starship
 sudo
 sushi
@@ -177,6 +181,8 @@ whois
 wireless-regdb
 wireplumber
 wl-clipboard
+wl-kbptr
+wlrctl
 woff2-font-awesome
 wtype
 xdebug
@@ -186,6 +192,7 @@ xdg-terminal-exec
 xournalpp
 yaru-icon-theme
 yay
+ydotool
 yt-dlp
 zbar
 zoxide

@@ -300,11 +300,15 @@ kcolorscheme
 kcompletion
 kconfig
 kconfigwidgets
+kcontacts
 kcoreaddons
 kcrash
 kdbusaddons
 kddockwidgets
+kdeclarative
+kdeconnect
 kdenlive
+kdsingleapplication
 kernel-modules-hook
 keychain
 keyutils
@@ -315,6 +319,7 @@ ki18n
 kiconthemes
 kio
 kirigami
+kirigami-addons
 kitemmodels
 kitemviews
 kjobwidgets
@@ -323,8 +328,11 @@ knewstuff
 knotifications
 knotifyconfig
 kpackage
+kpeople
 krb5
 kservice
+kstatusnotifieritem
+ksvg
 ktextwidgets
 kwallet
 kwidgetsaddons
@@ -415,6 +423,7 @@ libevdev
 libevent
 libexif
 libexttextcat
+libfakekey
 libfbclient
 libfdk-aac
 libffi
@@ -464,6 +473,7 @@ liblsan
 libluv
 libmakepkg-dropins
 libmanette
+libmbim
 libmd
 libmm-glib
 libmng
@@ -499,6 +509,7 @@ libogg
 libopenmpt
 liborcus
 libosinfo
+libp11
 libp11-kit
 libpagemaker
 libpaper
@@ -518,6 +529,8 @@ libproxy
 libpsl
 libpulse
 libpwquality
+libqmi
+libqrtr-glib
 libquadmath
 libqxp
 libraqm
@@ -667,12 +680,15 @@ md4c
 mdadm
 media-player-info
 mesa
+meson
 minizip
 mise-bin
 mkinitcpio
 mkinitcpio-busybox
 mlt
 mobile-broadband-provider-info
+modemmanager
+modemmanager-qt
 moonlight-qt
 mpdecimal
 mpfr
@@ -691,8 +707,11 @@ neovim
 net-snmp
 nettle
 networkmanager
+nextcloud-client
 nftables
 nginx
+ninja
+nmap
 node-gyp
 nodejs
 nodejs-nopt
@@ -771,10 +790,12 @@ popt
 portaudio
 postgresql-libs
 power-profiles-daemon
+ppp
 procps-ng
 protobuf
 psmisc
 pugixml
+pulseaudio-qt
 purpose
 pyside6
 python
@@ -797,6 +818,7 @@ python-qtpy
 python-requests
 python-shtab
 python-termcolor
+python-tqdm
 python-typing_extensions
 python-urllib3
 python-yaml
@@ -810,6 +832,7 @@ qrcodegencpp-cmake
 qrencode
 qt6-5compat
 qt6-base
+qt6-connectivity
 qt6-declarative
 qt6-imageformats
 qt6-multimedia
@@ -823,6 +846,8 @@ qt6-translations
 qt6-wayland
 qt6-webchannel
 qt6-webengine
+qt6-websockets
+qtkeychain-qt6
 quickshell
 raptor
 rasqal
@@ -838,6 +863,7 @@ ruby
 rubygems
 runc
 sbc
+scdoc
 sdbus-cpp
 sddm
 sdl2-compat
@@ -879,6 +905,7 @@ spotify
 sqlite
 sratom
 srt
+sshfs
 starship
 sudo
 sushi
@@ -962,6 +989,9 @@ whois
 wireless-regdb
 wireplumber
 wl-clipboard
+wl-kbptr
+wlrctl
+wlrctl-debug
 woff2
 woff2-font-awesome
 wpa_supplicant
@@ -1005,6 +1035,7 @@ xz
 yarn
 yaru-icon-theme
 yay
+ydotool
 yoga
 yt-dlp
 yt-dlp-ejs

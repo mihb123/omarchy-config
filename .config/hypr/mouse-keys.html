@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hyprland Mouse Mode</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground:   #fbfbfc;
+    --panel:    #f1f2f5;
+    --ink:      #16181d;
+    --muted:    #5c6270;
+    --rule:     #e2e4e9;
+    --accent:   #9a6600;
+    --keycap:   #ffffff;
+    --keycap-b: #d3d7df;
+
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "JetBrainsMono Nerd Font", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #111318;
+      --panel:    #1a1d24;
+      --ink:      #e6e8ee;
+      --muted:    #949bab;
+      --rule:     #262a33;
+      --accent:   #ffcc00;
+      --keycap:   #1c2028;
+      --keycap-b: #343a45;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:   #111318;
+    --panel:    #1a1d24;
+    --ink:      #e6e8ee;
+    --muted:    #949bab;
+    --rule:     #262a33;
+    --accent:   #ffcc00;
+    --keycap:   #1c2028;
+    --keycap-b: #343a45;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 40px 24px 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  header { display: flex; flex-direction: column; gap: 6px; }
+
+  h1 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+
+  .lede { margin: 0; color: var(--muted); max-width: 60ch; }
+  .lede kbd { margin-inline: 1px; }
+
+  .groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+    gap: 28px 40px;
+    align-items: start;
+  }
+
+  section { display: flex; flex-direction: column; gap: 2px; }
+
+  h2 {
+    margin: 0 0 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .hint {
+    margin: -4px 0 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 138px 1fr;
+    gap: 8px 14px;
+    align-items: baseline;
+    padding: 7px 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .row:first-of-type { border-top: none; }
+
+  .keys { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
+
+  .sep { color: var(--muted); font-size: 12px; }
+
+  .what { margin: 0; }
+  .what .note { display: block; color: var(--muted); font-size: 13px; }
+
+  kbd {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 2px 6px;
+    border: 1px solid var(--keycap-b);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: var(--keycap);
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .px {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    color: var(--muted);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  footer code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--panel);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--ink);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <h1>Mouse mode</h1>
+    <p class="lede">Điều khiển con trỏ bằng bàn phím trên Hyprland. Vào bằng <kbd>Super</kbd> <kbd>M</kbd>, mọi phím bên dưới chỉ có tác dụng khi đang ở trong mode.</p>
+  </header>
+
+  <div class="groups">
+
+    <section>
+      <h2>Vào &amp; ra</h2>
+      <div class="row">
+        <div class="keys"><kbd>Super</kbd><kbd>M</kbd></div>
+        <p class="what">Vào mouse mode</p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>Super</kbd><kbd>Alt</kbd><kbd>M</kbd></div>
+        <p class="what">Click nhanh một lần
+          <span class="note">Không vào mode. Hiện nhãn, gõ nhãn là click luôn.</span>
+        </p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>Esc</kbd><span class="sep">/</span><kbd>q</kbd></div>
+        <p class="what">Thoát</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Di chuyển</h2>
+      <p class="hint">Giữ phím để chạy liên tục.</p>
+      <div class="row">
+        <div class="keys"><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></div>
+        <p class="what">Trái / xuống / lên / phải <span class="px">24 px</span></p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>Shift</kbd><span class="sep">+</span><kbd>hjkl</kbd></div>
+        <p class="what">Bước dài <span class="px">140 px</span></p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>Ctrl</kbd><span class="sep">+</span><kbd>hjkl</kbd></div>
+        <p class="what">Bước mịn <span class="px">4 px</span></p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>←</kbd><kbd>↓</kbd><kbd>↑</kbd><kbd>→</kbd></div>
+        <p class="what">Giống hjkl, kể cả Shift và Ctrl</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Nhảy tới đích</h2>
+      <div class="row">
+        <div class="keys"><kbd>a</kbd></div>
+        <p class="what">Gắn nhãn mọi thứ bấm được
+          <span class="note">Gõ nhãn để đưa con trỏ tới. Vẫn ở trong mode.</span>
+        </p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>Shift</kbd><kbd>A</kbd></div>
+        <p class="what">Như trên, nhưng click luôn rồi thoát mode</p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>g</kbd></div>
+        <p class="what">Lưới
+          <span class="note">Chọn một ô, rồi chia đôi dần cho tới đúng điểm. Dùng được ở chỗ mà <kbd>a</kbd> không dò ra gì.</span>
+        </p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>c</kbd></div>
+        <p class="what">Về giữa cửa sổ đang focus</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Bấm chuột</h2>
+      <div class="row">
+        <div class="keys"><kbd>s</kbd><kbd>d</kbd><kbd>f</kbd></div>
+        <p class="what">Trái / giữa / phải</p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>Enter</kbd><span class="sep">/</span><kbd>Space</kbd></div>
+        <p class="what">Click trái rồi thoát mode</p>
+      </div>
+      <p class="hint" style="margin: 8px 0 0;">Không có kéo thả — giữ nút trong khi compositor dời con trỏ không ra được thao tác kéo thật.</p>
+    </section>
+
+    <section>
+      <h2>Cuộn</h2>
+      <p class="hint">Giữ phím để cuộn tiếp.</p>
+      <div class="row">
+        <div class="keys"><kbd>e</kbd><kbd>r</kbd></div>
+        <p class="what">Lên / xuống <span class="px">~130 px</span></p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>t</kbd><kbd>y</kbd></div>
+        <p class="what">Trái / phải <span class="px">~130 px</span></p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>u</kbd><kbd>i</kbd></div>
+        <p class="what">Lên / xuống, cuộn nhanh <span class="px">~500 px</span></p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>o</kbd><kbd>p</kbd></div>
+        <p class="what">Trái / phải, cuộn nhanh <span class="px">~500 px</span></p>
+      </div>
+      <p class="hint" style="margin: 8px 0 0;">Cuộn nhanh cố tình không dùng <kbd>Shift</kbd>: con trỏ ảo gửi sự kiện lúc phím Shift thật vẫn đang giữ, mà GTK, Chromium và Firefox đều hiểu Shift + lăn chuột là "cuộn trục kia" nên nó bị xoay 90°. <kbd>Ctrl</kbd> thì là zoom, <kbd>Alt</kbd> là lùi/tới trang.</p>
+    </section>
+
+    <section>
+      <h2>Khi lớp nhãn đang hiện</h2>
+      <p class="hint">Sau khi bấm <kbd>a</kbd>, <kbd>Shift</kbd><kbd>A</kbd> hoặc <kbd>g</kbd> — lúc này wl-kbptr giữ bàn phím, không phải các phím ở trên.</p>
+      <div class="row">
+        <div class="keys"><kbd>a</kbd><span class="sep">…</span><kbd>z</kbd></div>
+        <p class="what">Gõ nhãn của vùng muốn chọn</p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>Enter</kbd><span class="sep">/</span><kbd>Space</kbd></div>
+        <p class="what">Đưa con trỏ tới điểm đánh dấu</p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>g</kbd><kbd>h</kbd><kbd>b</kbd></div>
+        <p class="what">Click trái / phải / giữa ngay tại đó</p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>Backspace</kbd></div>
+        <p class="what">Lùi lại một bước chọn</p>
+      </div>
+      <div class="row">
+        <div class="keys"><kbd>Esc</kbd></div>
+        <p class="what">Huỷ, không động vào con trỏ</p>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    <div>Đổi phím và số px ở <code>~/.config/hypr/mouse-keys.lua</code> — các hằng <code>STEP</code> và <code>SCROLL</code> nằm ngay đầu file.</div>
+    <div>Di chuyển con trỏ do chính Hyprland làm. Click và cuộn qua <code>wlrctl</code>. Gắn nhãn qua <code>wl-kbptr</code>.</div>
+  </footer>
+
+</div>
+</body>
+</html>

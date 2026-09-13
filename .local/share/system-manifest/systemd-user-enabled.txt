@@ -1,5 +1,7 @@
 bt-agent.service
+fcitx-ime-window.service
 gnome-keyring-daemon.socket
+kdeconnect-sync-commands.path
 livetrans-idle-stop.timer
 omarchy-crash-watch.service
 omarchy-fcitx5.service
@@ -14,3 +16,4 @@ pipewire.socket
 voxtype.service
 wireplumber.service
 xdg-user-dirs.service
+ydotool.service

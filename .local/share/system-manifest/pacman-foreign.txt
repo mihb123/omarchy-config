@@ -8,3 +8,6 @@ electron27-bin-debug
 fcitx5-lotus-bin
 fcitx5-lotus-bin-debug
 google-chrome
+wl-kbptr
+wlrctl
+wlrctl-debug

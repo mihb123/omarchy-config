@@ -32,6 +32,9 @@
 /.config/microsoft-edge*/
 /.config/firefox/
 /.config/vivaldi/
+/.config/Nextcloud/
+/.config/kdeconnect/
+/.config/cliamp/
 
 # app nặng hoặc chỉ chứa state, không phải config
 /.config/Antigravity IDE/

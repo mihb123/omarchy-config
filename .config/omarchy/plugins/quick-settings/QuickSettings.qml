@@ -183,7 +183,8 @@ Panel {
     labelVisible: false
     hasVisualContent: true
     horizontalMargin: 8
-    fixedWidth: vertical ? -1 : Math.max(88, Math.round(barRow.implicitWidth + Style.space(20)))
+    readonly property int slotMargin: Style.space(6)
+    fixedWidth: vertical ? -1 : Math.max(Style.space(32), Math.round(barRow.implicitWidth + Style.space(14) + slotMargin * 2))
     fixedHeight: vertical ? Style.space(28) : -1
     tooltipText: "Quick Settings (Control Center)\nClick to open · Wi-Fi: " + root.wifiSsid + " · Vol: " + root.volume + "%"
 
@@ -191,6 +192,8 @@ Panel {
 
     Rectangle {
       anchors.fill: parent
+      anchors.leftMargin: button.slotMargin
+      anchors.rightMargin: button.slotMargin
       anchors.topMargin: Style.space(3)
       anchors.bottomMargin: Style.space(3)
       radius: Style.space(12)
@@ -202,29 +205,30 @@ Panel {
     Row {
       id: barRow
       anchors.centerIn: parent
-      spacing: Style.space(7)
+      spacing: Style.space(5)
 
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        text: "󱄅"
-        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.body
-        color: root.opened ? Color.accent : (root.bar ? root.bar.barForeground : Color.foreground)
-      }
-
-      Rectangle {
-        anchors.verticalCenter: parent.verticalCenter
-        width: 1
-        height: Style.space(12)
-        color: Qt.rgba(1, 1, 1, 0.2)
-      }
+      // Text {
+      //   anchors.verticalCenter: parent.verticalCenter
+      //   text: "󱄅"
+      //   font.family: root.bar ? root.bar.fontFamily : Style.font.family
+      //   font.pixelSize: Style.font.body
+      //   color: root.opened ? Color.accent : (root.bar ? root.bar.barForeground : Color.foreground)
+      // }
+      //
+      // Rectangle {
+      //   anchors.verticalCenter: parent.verticalCenter
+      //   width: 1
+      //   height: Style.space(12)
+      //   color: Qt.rgba(1, 1, 1, 0.2)
+      // }
 
       Text {
         anchors.verticalCenter: parent.verticalCenter
         text: ""
         font.family: root.bar ? root.bar.fontFamily : Style.font.family
         font.pixelSize: Style.font.caption
-        color: root.wifiConnected ? (root.bar ? root.bar.barForeground : Color.foreground) : Qt.rgba(1,1,1,0.3)
+        visible: root.wifiConnected
+        color: root.bar ? root.bar.barForeground : Color.foreground
       }
 
       Text {
@@ -232,25 +236,36 @@ Panel {
         text: ""
         font.family: root.bar ? root.bar.fontFamily : Style.font.family
         font.pixelSize: Style.font.caption
-        color: root.btPowered ? (root.bar ? root.bar.barForeground : Color.foreground) : Qt.rgba(1,1,1,0.3)
+        visible: root.btPowered
+        color: root.bar ? root.bar.barForeground : Color.foreground
       }
 
       Text {
         anchors.verticalCenter: parent.verticalCenter
-        text: root.muted ? "" : (root.volume > 50 ? "" : (root.volume > 0 ? "" : ""))
+        text: root.volume > 50 ? "" : (root.volume > 0 ? "" : "")
         font.family: root.bar ? root.bar.fontFamily : Style.font.family
         font.pixelSize: Style.font.caption
-        color: root.muted ? (root.bar ? root.bar.urgent : Color.urgent) : (root.bar ? root.bar.barForeground : Color.foreground)
+        visible: !root.muted
+        color: root.bar ? root.bar.barForeground : Color.foreground
       }
 
       Text {
         anchors.verticalCenter: parent.verticalCenter
-        visible: root.tailscaleConnected
-        text: "󰒊"
+        visible: !root.wifiConnected && !root.btPowered && root.muted
+        text: "⚙"
         font.family: root.bar ? root.bar.fontFamily : Style.font.family
         font.pixelSize: Style.font.caption
-        color: root.tailscaleConnected ? (root.bar ? root.bar.barForeground : Color.foreground) : Qt.rgba(1,1,1,0.3)
+        color: root.bar ? root.bar.barForeground : Color.foreground
       }
+
+      // Text {
+      //   anchors.verticalCenter: parent.verticalCenter
+      //   visible: root.tailscaleConnected
+      //   text: "󰒊"
+      //   font.family: root.bar ? root.bar.fontFamily : Style.font.family
+      //   font.pixelSize: Style.font.caption
+      //   color: root.tailscaleConnected ? (root.bar ? root.bar.barForeground : Color.foreground) : Qt.rgba(1,1,1,0.3)
+      // }
     }
 
     MouseArea {
