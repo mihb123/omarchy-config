@@ -28,6 +28,11 @@ hl.config({
   },
 })
 
+-- Pointer speed per device (-1.0 slowest .. 1.0 fastest, 0 = default).
+-- Device names come from `hyprctl devices`.
+hl.device({ name = "syna8004:00-06cb:cd8b-touchpad", sensitivity = 0.4 })
+hl.device({ name = "tpps/2-elan-trackpoint", sensitivity = 0.6 })
+
 -- App-specific touchpad scroll speeds.
 o.window("(Alacritty|kitty|foot)", { scroll_touchpad = 1.5 })
 o.window("com.mitchellh.ghostty", { scroll_touchpad = 0.2 })

@@ -42,7 +42,7 @@ BarIconButton {
 
   tooltipText: (dnd ? "Notifications silenced" : "Notifications")
     + (onScreen > 0 ? "  ·  " + onScreen + " on screen" : "")
-    + "\nleft — history          SUPER + SHIFT + ALT + ,"
+    + "\nleft — stack (open / dismiss)   SUPER + N"
     + "\nright — " + (dnd ? "allow" : "silence") + "    SUPER + CTRL + ,"
     + "\nmiddle — dismiss all   SUPER + SHIFT + ,"
 
@@ -53,6 +53,8 @@ BarIconButton {
       root.service.setDoNotDisturb(!root.service.doNotDisturb)
     else if (button === Qt.MiddleButton)
       root.service.clearPopups()
+    else if (typeof root.service.toggleStack === "function")
+      root.service.toggleStack()
     else
       root.service.showRecentHistory()
   }

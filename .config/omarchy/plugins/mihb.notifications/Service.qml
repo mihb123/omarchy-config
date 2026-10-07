@@ -89,11 +89,125 @@ Item {
   // Aliased as a property so consumers outside this Item's id scope can bind
   // to it. QML ids aren't visible to external consumers without the alias.
   property alias popupModel: popupModel
-  ListModel { id: popupModel }
+  ListModel {
+    id: popupModel
+    onCountChanged: service.updateStackRowCount()
+  }
 
   // How many notifications the history directory keeps, and therefore how
   // many `showHistory` can replay.
-  readonly property int historyLimit: 10
+  //
+  // LOCAL: 50 instead of upstream's 10. The history directory is the
+  // notification stack SUPER+N opens, and ten entries is barely a stack.
+  readonly property int historyLimit: 50
+
+  // ------------------------------------------------ LOCAL: notification stack
+  //
+  // The stack is every notification that is on screen or in historyDir.
+  // SUPER+N (toggleStack) opens it — history replayed as cards that do not
+  // time out — and the next SUPER+N dismisses everything on screen, which
+  // leaves it all in the stack. The ✕ on a card and the "Clear all" button
+  // are the only ways out of the stack (see forgetPopup, clearStack).
+  property bool stackOpen: false
+
+  // Rows that are real notifications, not the "No recent notifications"
+  // placeholder (originalId -1).
+  property int stackRowCount: 0
+
+  function updateStackRowCount() {
+    var n = 0
+    for (var i = 0; i < popupModel.count; i++) {
+      var row = popupModel.get(i)
+      if (row && row.originalId >= 0) n++
+    }
+    stackRowCount = n
+    // Everything left the screen one way or another: the stack is closed.
+    if (popupModel.count === 0) stackOpen = false
+  }
+
+  function toggleStack() {
+    if (stackOpen) {
+      clearPopups()
+      stackOpen = false
+      return "closed"
+    }
+    showRecentHistory()
+    return "open"
+  }
+
+  // Empty the stack: every card on screen and every history file.
+  function clearStack() {
+    while (popupModel.count > 0) forgetPopup(0)
+    clearHistory()
+    stackOpen = false
+  }
+
+  // ------------------------------------------------ LOCAL: notification log
+  //
+  // Every notification received is appended as one line to logPath, so there
+  // is a record to go back to after the stack has been cleared. Lines older
+  // than logRetentionDays are pruned on append, at startup and hourly.
+  readonly property string logPath: stateDir + "notifications.log"
+  readonly property int logRetentionDays: 5
+
+  function logTime(ms) {
+    return Qt.formatDateTime(new Date(ms), "yyyy-MM-dd HH:mm:ss")
+  }
+
+  // Markup and line breaks out: one notification is one line, and every line
+  // starts with its timestamp so pruning can compare it as a string.
+  function logText(value) {
+    return String(value || "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]*>/g, "")
+      .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/&quot;/g, "\"").replace(/&#39;|&apos;/g, "'")
+      .replace(/&amp;/g, "&")
+      .replace(/\s*[\r\n]+\s*/g, " ⏎ ")
+      .replace(/[\t\x00-\x08\x0b-\x1f]/g, " ")
+      .trim()
+  }
+
+  // `when` overrides the entry's timestamp: an in-place update keeps the
+  // original notification's timestamp, but is logged at the time it arrived.
+  function logNotification(entry, tags, when) {
+    if (!entry) return
+    var urgency = Number(entry.urgency)
+    var marks = (tags || []).slice()
+    if (urgency === 2) marks.unshift("critical")
+    else if (urgency === 0) marks.unshift("low")
+    var summary = logText(entry.summary)
+    var body = logText(NotificationLogic.sanitizeBody(entry.body, entry.app, entry.appIcon))
+    var line = logTime(when || entry.timestamp || Date.now())
+      + "  [" + (logText(entry.app) || "unknown") + "]"
+      + (marks.length > 0 ? " (" + marks.join(", ") + ")" : "")
+      + "  " + (summary || "(no summary)")
+      + (body ? "  —  " + body : "")
+    appendLog(line)
+  }
+
+  // An empty line only prunes. The first line is the oldest, so the whole
+  // file is rewritten only when that one has aged out.
+  function appendLog(line) {
+    var cutoff = logTime(Date.now() - logRetentionDays * 86400000)
+    enqueuePopupFileJob(["bash", "-c",
+      "log=\"$1\" cut=\"$2\" line=\"$3\"\n" +
+      "mkdir -p \"${log%/*}\" || exit 0\n" +
+      "[[ -n $line ]] && printf '%s\\n' \"$line\" >> \"$log\"\n" +
+      "[[ -s $log ]] || exit 0\n" +
+      "first=$(head -c 19 -- \"$log\")\n" +
+      "if [[ $first < $cut ]]; then\n" +
+      "  awk -v c=\"$cut\" 'substr($0, 1, 19) >= c' \"$log\" > \"$log.tmp\" && mv -f -- \"$log.tmp\" \"$log\"\n" +
+      "fi", "--",
+      logPath, cutoff, String(line || "")])
+  }
+
+  Timer {
+    interval: 3600000
+    repeat: true
+    running: true
+    onTriggered: service.appendLog("")
+  }
 
   readonly property int lowPopupDuration: 5000
   readonly property int normalPopupDuration: 8000
@@ -180,7 +294,10 @@ Item {
     // DND bypass rules: chat apps abuse urgency=critical to force
     // visibility, so critical alone isn't enough — we also require the
     // sender to be CLI-style. See shouldBypassDnd().
-    if (service.doNotDisturb && !shouldBypassDnd(notification)) {
+    var silenced = service.doNotDisturb && !shouldBypassDnd(notification)
+    // LOCAL: every notification goes in the log, silenced ones included.
+    logNotification(snapshot, silenced ? ["silenced"] : [])
+    if (silenced) {
       // The toast never shows, so the only record a silenced notification
       // can leave is a history entry. Write it straight into history —
       // "what did I miss while silenced" is exactly what history is for.
@@ -281,6 +398,11 @@ Item {
       var row = popupModel.get(i)
       if (!row || row.originalId !== originalId || row.timestamp !== timestamp) continue
       if (!NotificationLogic.popupRowChanged(row, updated)) return
+      // LOCAL: new text replacing the old in place is a notification the
+      // user may not have seen, so it gets its own log line. Icon, image or
+      // hint changes alone do not.
+      if (row.summary !== updated.summary || row.body !== updated.body)
+        logNotification(updated, ["updated"], Date.now())
       for (var r = 0; r < roles.length; r++) popupModel.setProperty(i, roles[r], updated[roles[r]])
       // The file name is the timestamp and id this popup was persisted under,
       // so the rewrite lands on the same file: a restart restores the version
@@ -328,6 +450,12 @@ Item {
     removePopup(index, "expire")
   }
 
+  // LOCAL: the ✕ on a card. Off the screen AND out of the stack: its files
+  // are deleted instead of archived into history.
+  function forgetPopup(index) {
+    removePopup(index, "forget")
+  }
+
   function removePopup(index, reason) {
     if (index < 0 || index >= popupModel.count) return
     var entry = popupModel.get(index)
@@ -341,8 +469,11 @@ Item {
     // survive to the next shell restart. It becomes the newest history entry
     // instead. Rows that never had a file (a history replay, the empty-history
     // placeholder) archive to nothing, which the move tolerates.
+    // A forgotten one goes nowhere: its live file, its history file (a replayed
+    // or carried-over row) and its image copies are all deleted.
     if (entry) {
-      archivePopupFileFor(entry)
+      if (reason === "forget") forgetFilesFor(entry)
+      else archivePopupFileFor(entry)
       if (restored) delete restoredPopups[NotificationLogic.popupFileName(entry)]
     }
     popupModel.remove(index)
@@ -648,6 +779,15 @@ Item {
     enqueuePopupFileJob(command, done)
   }
 
+  // LOCAL: take one notification out of the stack wherever its file is —
+  // still on screen (popupStateDir) or already archived (historyDir).
+  function forgetFilesFor(row) {
+    if (!row) return
+    enqueuePopupFileJob(["bash", "-c",
+      "rm -f \"$1/$3.json\" \"$2/$3.json\" \"$4/$3\"-*", "--",
+      popupStateDir, historyDir, NotificationLogic.imageStem(row), imagesDir])
+  }
+
   function clearHistory() {
     enqueuePopupFileJob(["bash", "-c",
       "for f in \"$1\"/*.json; do\n" +
@@ -695,7 +835,11 @@ Item {
   // Re-show what's in historyDir as toasts. The read goes through the file
   // queue and its own subprocess, so the replay lands in replayHistory once
   // the work queued ahead of it has finished.
+  //
+  // LOCAL: the replay IS the stack (see toggleStack), so asking for it opens
+  // the stack and stops the cards from timing out.
   function showRecentHistory() {
+    service.stackOpen = true
     if (readHistoryProc.running || service.historyReadQueued) return "ok"
     service.replayCarryOver = liveRowsForReplay()
     service.historyReadQueued = true
@@ -742,6 +886,10 @@ Item {
       raw, service.replayCarryOver, NotificationUrgency.Normal, service.historyLimit)
     service.replayCarryOver = []
 
+    // LOCAL: the stack was dismissed again while the read was in flight — a
+    // second SUPER+N already cleared the screen, so don't bring it back.
+    if (!service.stackOpen) return
+
     // Replaying nothing at all looks like a dead keybinding, so say so.
     if (rows.length === 0) {
       popupModel.insert(0, {
@@ -770,6 +918,9 @@ Item {
       service.restoredPopups[NotificationLogic.popupFileName(rows[i])] = true
       popupModel.append(rows[i])
     }
+    // clearPopups() above emptied the model for a moment, which closes the
+    // stack (updateStackRowCount); the replayed rows are the stack.
+    service.stackOpen = true
   }
 
   Process {
@@ -912,6 +1063,8 @@ Item {
       // Safe beside the restore read: it only re-persists entries whose
       // JSON exists, exactly the images the sweep keeps.
       service.sweepOrphanImages()
+      // LOCAL: drop log lines older than logRetentionDays.
+      service.appendLog("")
     })
   }
 
@@ -953,7 +1106,24 @@ Item {
 
     function dismissAll(): string {
       service.clearPopups()
+      service.stackOpen = false
       return "ok"
+    }
+
+    // LOCAL: SUPER+N. Opens the stack, or dismisses everything on screen when
+    // it is already open. Returns the new state: "open" or "closed".
+    function toggleStack(): string {
+      return service.toggleStack()
+    }
+
+    // LOCAL: the "Clear all" button — empties the stack for good.
+    function clearStack(): string {
+      service.clearStack()
+      return "ok"
+    }
+
+    function stackState(): string {
+      return service.stackOpen ? "open" : "closed"
     }
 
     // Dismiss the most recent popup.
@@ -1038,87 +1208,134 @@ Item {
 
       // Keep the surface click-through except over the toast column, so the
       // rest of the (invisible) full-screen overlay never eats input.
-      mask: Region { item: popupColumn }
+      mask: Region { item: stackArea }
+
+      // LOCAL: the stack header (count + Clear all) shows while the stack is
+      // open, or whenever two or more toasts are up anyway.
+      readonly property bool showHeader: service.stackRowCount > 0
+        && (service.stackOpen || service.stackRowCount >= 2)
+
+      // LOCAL: a full stack is taller than the screen, so the cards scroll
+      // below the header instead of running off the bottom edge.
+      readonly property real maxListHeight: Math.max(Style.space(80),
+        popupWindow.height - popupWindow.popupPlacement.margins.top - Style.gapsOut
+          - (showHeader ? stackHeader.implicitHeight + stackArea.spacing : 0))
 
       ColumnLayout {
-        id: popupColumn
+        id: stackArea
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.topMargin: popupWindow.popupPlacement.margins.top
         anchors.rightMargin: popupWindow.popupPlacement.margins.right
         spacing: Style.space(8)
 
-        Repeater {
-          model: popupModel
+        StackHeader {
+          id: stackHeader
+          visible: popupWindow.showHeader
+          Layout.alignment: Qt.AlignRight
+          Layout.preferredWidth: Math.max(implicitWidth, popupColumn.implicitWidth)
+          count: service.stackRowCount
+          cornerRadius: service.cornerRadius
+          onClearRequested: service.clearStack()
+        }
 
-          // The delegate is a slot Item that owns lifetime timer state. The
-          // actual visuals live in NotificationCard, which the history panel
-          // also reuses.
-          delegate: Item {
-            id: cardSlot
-            required property int index
-            required property string app
-            required property string appIcon
-            required property string summary
-            required property string body
-            required property string image
-            required property string glyph
-            required property int urgency
-            required property double expireTimeout
-            required property double timestamp
+        Flickable {
+          id: popupFlick
+          Layout.alignment: Qt.AlignRight
+          Layout.preferredWidth: popupColumn.implicitWidth
+          Layout.preferredHeight: Math.min(popupColumn.implicitHeight, popupWindow.maxListHeight)
+          contentWidth: popupColumn.implicitWidth
+          contentHeight: popupColumn.implicitHeight
+          clip: true
+          interactive: contentHeight > height
+          boundsBehavior: Flickable.StopAtBounds
 
-            // Each card sizes itself based on mode (text vs media); the slot
-            // tracks the card so the column auto-fits to whichever is widest.
-            Layout.preferredWidth: card.implicitWidth
-            Layout.alignment: Qt.AlignRight
-            implicitHeight: card.implicitHeight
+          ColumnLayout {
+            id: popupColumn
+            spacing: Style.space(8)
 
-            readonly property real lifetime: service.durationFor(cardSlot.urgency, cardSlot.expireTimeout)
-            property real remainingLifetime: 1.0
-            readonly property bool ticking: cardSlot.lifetime > 0 && !card.hovered
+            Repeater {
+              model: popupModel
 
-            // A client updating this notification in place rewrites the row
-            // under the card (see refreshPopup). New text deserves a full look,
-            // so the countdown starts over instead of running out the clock the
-            // superseded text was already most of the way through. Delegates
-            // keep their own row as the model changes around them, so only a
-            // real content change lands here.
-            onSummaryChanged: cardSlot.remainingLifetime = 1.0
-            onBodyChanged: cardSlot.remainingLifetime = 1.0
-            onImageChanged: cardSlot.remainingLifetime = 1.0
+              // The delegate is a slot Item that owns lifetime timer state. The
+              // actual visuals live in NotificationCard, which the history panel
+              // also reuses.
+              delegate: Item {
+                id: cardSlot
+                required property int index
+                required property int originalId
+                required property string app
+                required property string appIcon
+                required property string summary
+                required property string body
+                required property string image
+                required property string glyph
+                required property int urgency
+                required property double expireTimeout
+                required property double timestamp
 
-            Timer {
-              interval: 50
-              repeat: true
-              running: cardSlot.ticking
-              onTriggered: {
-                if (cardSlot.lifetime <= 0) return
-                cardSlot.remainingLifetime -= 50.0 / cardSlot.lifetime
-                if (cardSlot.remainingLifetime <= 0) {
-                  cardSlot.remainingLifetime = 0
-                  service.expirePopup(cardSlot.index)
+                // Each card sizes itself based on mode (text vs media); the slot
+                // tracks the card so the column auto-fits to whichever is widest.
+                Layout.preferredWidth: card.implicitWidth
+                Layout.alignment: Qt.AlignRight
+                implicitHeight: card.implicitHeight
+
+                readonly property real lifetime: service.durationFor(cardSlot.urgency, cardSlot.expireTimeout)
+                property real remainingLifetime: 1.0
+                // LOCAL: cards in an open stack stay until SUPER+N dismisses them.
+                // The "No recent notifications" placeholder (originalId -1) still
+                // times out, and the stack closes with it.
+                readonly property bool held: service.stackOpen && cardSlot.originalId >= 0
+                readonly property bool ticking: cardSlot.lifetime > 0 && !card.hovered && !cardSlot.held
+
+                // A client updating this notification in place rewrites the row
+                // under the card (see refreshPopup). New text deserves a full look,
+                // so the countdown starts over instead of running out the clock the
+                // superseded text was already most of the way through. Delegates
+                // keep their own row as the model changes around them, so only a
+                // real content change lands here.
+                onSummaryChanged: cardSlot.remainingLifetime = 1.0
+                onBodyChanged: cardSlot.remainingLifetime = 1.0
+                onImageChanged: cardSlot.remainingLifetime = 1.0
+
+                Timer {
+                  interval: 50
+                  repeat: true
+                  running: cardSlot.ticking
+                  onTriggered: {
+                    if (cardSlot.lifetime <= 0) return
+                    cardSlot.remainingLifetime -= 50.0 / cardSlot.lifetime
+                    if (cardSlot.remainingLifetime <= 0) {
+                      cardSlot.remainingLifetime = 0
+                      service.expirePopup(cardSlot.index)
+                    }
+                  }
+                }
+
+                NotificationCard {
+                  id: card
+                  anchors.right: parent.right
+                  app: cardSlot.app
+                  appIcon: cardSlot.appIcon
+                  summary: cardSlot.summary
+                  body: cardSlot.body
+                  image: cardSlot.image
+                  urgency: cardSlot.urgency
+                  timestamp: cardSlot.timestamp
+                  cornerRadius: service.cornerRadius
+                  fontFamily: service.shell && service.shell.bar ? service.shell.bar.fontFamily : ""
+                  glyph: cardSlot.glyph
+                  // No countdown bar on a held card: it isn't counting down.
+                  lifetime: cardSlot.held ? 0 : cardSlot.lifetime
+                  remainingLifetime: cardSlot.remainingLifetime
+
+                  // LOCAL: ✕ removes it from the stack; right/middle click only
+                  // takes it off the screen (it stays in the stack).
+                  onCloseRequested: service.forgetPopup(cardSlot.index)
+                  onDismissRequested: service.dismissPopup(cardSlot.index)
+                  onCardClicked: service.invokePopupDefault(cardSlot.index)
                 }
               }
-            }
-
-            NotificationCard {
-              id: card
-              anchors.right: parent.right
-              app: cardSlot.app
-              appIcon: cardSlot.appIcon
-              summary: cardSlot.summary
-              body: cardSlot.body
-              image: cardSlot.image
-              urgency: cardSlot.urgency
-              timestamp: cardSlot.timestamp
-              cornerRadius: service.cornerRadius
-              fontFamily: service.shell && service.shell.bar ? service.shell.bar.fontFamily : ""
-              glyph: cardSlot.glyph
-              lifetime: cardSlot.lifetime
-              remainingLifetime: cardSlot.remainingLifetime
-
-              onCloseRequested: service.dismissPopup(cardSlot.index)
-              onCardClicked: service.invokePopupDefault(cardSlot.index)
             }
           }
         }

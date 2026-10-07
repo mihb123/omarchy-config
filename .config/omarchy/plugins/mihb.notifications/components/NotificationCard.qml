@@ -34,7 +34,11 @@ BorderSurface {
 
   readonly property bool hovered: hoverTracker.hovered
 
+  // LOCAL: the ✕ takes the notification out of the stack for good
+  // (closeRequested); a right/middle click only takes it off the screen and
+  // leaves it in the stack (dismissRequested).
   signal closeRequested()
+  signal dismissRequested()
   signal cardClicked()
   // Prefer per-notification media/avatar data, then fall back to the app icon.
   // The `check` flag avoids Qt's missing-texture placeholder for unknown names.
@@ -82,7 +86,7 @@ BorderSurface {
     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
     onClicked: function(mouse) {
       if (mouse.button === Qt.RightButton || mouse.button === Qt.MiddleButton) {
-        root.closeRequested()
+        root.dismissRequested()
       } else {
         root.cardClicked()
       }

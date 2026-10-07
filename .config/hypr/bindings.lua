@@ -28,7 +28,7 @@
 -- o.bind("SUPER + H", nil, "voxtype record toggle")
 -- o.bind("SUPER + PERIOD", nil, "omarchy-shell shell toggle omarchy.emojis")
 
--- Cycle the input method (English -> Lotus -> Unikey) with Ctrl+Shift.
+-- Toggle the input method (English <-> Lotus) with Ctrl+Shift; Unikey is picked from the bar.
 --
 -- fcitx5-remote -t only ever toggles the group on and off, so it cannot reach a
 -- third profile. The cycle walks all three in order and records the choice for
@@ -67,6 +67,12 @@ o.bind("CTRL + SHIFT + Shift_R", "Cycle input method", ime_cycle, vi_toggle)
 o.bind("CTRL + SHIFT + Control_L", "Cycle input method", ime_cycle, vi_toggle)
 o.bind("CTRL + SHIFT + Control_R", "Cycle input method", ime_cycle, vi_toggle)
 
+-- Unikey is outside the Ctrl+Shift cycle. Picking it from the bar widget means
+-- crossing other windows with the mouse, and follow_mouse hands them focus on
+-- the way, so the widget sets Unikey on the wrong window. This key always hits
+-- the window you are typing in.
+o.bind("SUPER + CTRL + U", "Switch to Unikey", os.getenv("HOME") .. "/.local/bin/fcitx-ime switch unikey")
+
 -- Faster Keybindings menu (SUPER+K): ~460ms -> ~135ms.
 --
 -- Default binding was: o.bind("SUPER + K", "Keybindings", "omarchy-menu-keybindings")
@@ -104,7 +110,7 @@ o.bind("SUPER + SHIFT + W", "Omawrite", { launch = os.getenv("HOME") .. "/bin/om
 o.bind("XF86Favorites", "Play/Pause media", "omarchy-shell media playPause", { locked = true })
 
 -- Upload screenshot using system capture utility
-o.bind("ALT + SHIFT + S", "Screenshot upload", os.getenv("HOME") .. "/bin/system/screenshot-upload.sh")
+o.bind("ALT + SHIFT + S", "Screenshot upload", os.getenv("HOME") .. "/bin/system/flameshot-upload.sh")
 
 
 
@@ -128,6 +134,7 @@ o.bind("F10", "Dictation vi (hold to talk)", os.getenv("HOME") .. "/Work/trans/d
 o.bind("F10", "Dictation vi (stop)", os.getenv("HOME") .. "/Work/trans/dictate stop", { release = true })
 o.bind("SHIFT + F10", "Dictation en (hold to talk)", os.getenv("HOME") .. "/Work/trans/dictate start -l en")
 o.bind("SHIFT + F10", "Dictation en (stop)", os.getenv("HOME") .. "/Work/trans/dictate stop", { release = true })
+o.bind("ALT + S", "Flameshot capture", { launch = "flameshot gui" })
 
 -- The same dictation, latched instead of held: SUPER+F10 starts a take and the
 -- next SUPER+F10 ends it. Holding a key is fine for a phrase and tiring for a
@@ -149,3 +156,13 @@ o.bind("SUPER + BACKSPACE", "Cycle window transparency", os.getenv("HOME") .. "/
 
 -- Keyboard-driven mouse pointer (SUPER + M). See hypr/mouse-keys.lua.
 require("hypr.mouse-keys")
+
+-- Notification stack (SUPER + N). See ~/.config/omarchy/plugins/mihb.notifications.
+-- First press opens the whole stack (on-screen toasts + history, held on
+-- screen with no timeout); the next press dismisses everything on screen,
+-- which leaves it in the stack. The ✕ on a card removes it from the stack;
+-- "Clear all" in the stack header empties it.
+-- Every notification is also logged to ~/.local/state/omarchy/notifications.log
+-- (last 5 days kept).
+-- SUPER+N was unbound before (SUPER+SHIFT+N is Editor, SUPER+CTRL+N nightlight).
+o.bind("SUPER + N", "Notification stack (open / dismiss all)", "omarchy-shell notifications toggleStack")

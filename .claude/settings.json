@@ -1,5 +1,17 @@
 {
-  "model": "opus[1m]",
+  "permissions": {
+    "allow": [
+      "mcp__codegraph__*",
+      "Bash(bash /home/mihb/.claude/skills/antigravity/scripts/*)",
+      "Bash(AGY_* bash /home/mihb/.claude/skills/antigravity/scripts/*)",
+      "Bash(agy -p *)"
+    ],
+    "deny": [
+      "Edit(~/.config/otm-api/**)",
+      "Read(~/.config/otm-api/**)"
+    ]
+  },
+  "model": "opus",
   "hooks": {
     "SessionStart": [
       {
@@ -12,6 +24,28 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "codegraph prompt-hook"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Grep|Glob|Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/block-otm-credentials.sh",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "modelSettings": {
@@ -20,9 +54,53 @@
     },
     "claude-sonnet-5": {
       "effortLevel": "high"
+    },
+    "claude-opus-5-5": {
+      "effortLevel": "high"
     }
   },
   "awaySummaryEnabled": false,
   "theme": "dark",
-  "inputNeededNotifEnabled": true
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "**Organization**: None configured",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: assume private — origin is gitlab.com:ctasolution/amacsport.git (not github.com, so gh visibility check was not queryable); repo name and org do not indicate a public project",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: .env-based (gitignore shows /.env.local, /.env.local.php, /.env.*.local, /.env.test, /AMAC-MCP/.env) — no external secrets manager configured",
+      "**Default / protected branches**: master (default branch, per repo facts); protection/ruleset status not queryable (origin not on github.com)",
+      "**CI/CD deploy targets**: GitLab CI deploys to production via SSH + `git reset --hard origin/master` (per ./CLAUDE.md); production tree must stay clean or CI refuses deploy",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine with open internet",
+      "**Source control**: The trusted repo (gitlab.com:ctasolution/amacsport.git, remote `origin`) and its secondary remote `debi` (debi-git:/home/git/repos/amac.git) — no additional orgs configured",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: debi-git:/home/git/repos/amac.git (secondary push/fetch remote for this repo); shell.mihb.site (host contacted in this project's recent Claude Code usage)",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: .env, .env.local, .env.local.php, .env.*.local, .env.test, AMAC-MCP/.env (credentials); config/packages/prod/doctrine.yaml, config/packages/prod/monolog.yaml (production config); deploy-prod.sh, sync-db-prod-to-test.sh (production deploy/sync scripts) — share only with audiences cleared for AMAC Sport production operations",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment (e.g. deploy-prod.sh, sync-db-prod-to-test.sh, config/packages/prod/*, and the `import-db-incremental` k8s namespace if it targets production data)",
+      "**Protected deployment namespaces / environments**: production environment reached via GitLab CI SSH deploy to master (per ./CLAUDE.md) — no push of migrations, no direct edits on server production tree",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment (e.g. config/packages/prod/*)",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development (Symfony/PHP backend + React/Twig frontend for AMAC Sport order/production management system)",
+      "**Trusted repo**: /home/mihb/Work/amacsport (origin: gitlab.com:ctasolution/amacsport.git; secondary remote debi: debi-git:/home/git/repos/amac.git) — treated as private; do not push database migrations (repo policy: no src/Migrations changes, schema changes via Doctrine entity annotations, backfills via root-level .sql files)",
+      "**Org-specific CLIs**: work-amac (3× in this project's Claude Code usage, 25× in shell history) — appears to be a project-specific helper script/alias",
+      "routine under docs/ and assets/react/ prefixes: SOP and changelog documentation edits, and React source edits in assets/react/ (no yarn build required per CLAUDE.md, dev server auto-builds)"
+    ],
+    "allow": [
+      "$defaults",
+      "Bash(php bin/console lint:twig:*)",
+      "Bash(php bin/console debug:router:*)"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Bash(php bin/console doctrine:migrations:*)",
+      "Bash(*deploy-prod.sh*)",
+      "Bash(*sync-db-prod-to-test.sh*)"
+    ]
+  }
 }

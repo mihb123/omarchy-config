@@ -20,6 +20,11 @@ EnumerateWithTriggerKeys=True
 [Hotkey/EnumerateBackwardKeys]
 0=
 
+# Mặc định fcitx5 là Shift_L ("Temporarily Toggle Input Method"): chỉ nhấn Shift
+# trái cũng đổi bộ gõ. Để trống để chỉ Ctrl+Shift (trong hypr/bindings.lua) đổi.
+[Hotkey/AltTriggerKeys]
+0=
+
 [Behavior]
 # Active By Default
 ActiveByDefault=False
